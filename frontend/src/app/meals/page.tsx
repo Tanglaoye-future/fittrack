@@ -15,7 +15,7 @@ const MEAL_TYPES: Record<string, string> = {
 };
 
 export default function MealsPage() {
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, hydrated } = useAuthStore();
   const router = useRouter();
   const [meals, setMeals] = useState<Meal[]>([]);
   const [total, setTotal] = useState(0);
@@ -23,6 +23,7 @@ export default function MealsPage() {
   const [date, setDate] = useState('');
   const [mealType, setMealType] = useState('');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingMeal, setEditingMeal] = useState<Meal | null>(null);
   const [form, setForm] = useState({
@@ -38,12 +39,14 @@ export default function MealsPage() {
   });
 
   useEffect(() => {
+    if (!hydrated) return;
     if (!isAuthenticated) { router.push('/login'); return; }
     loadMeals();
-  }, [isAuthenticated, page, date, mealType]);
+  }, [hydrated, isAuthenticated, page, date, mealType]);
 
   const loadMeals = async () => {
     setLoading(true);
+    setError('');
     try {
       const params: any = { page, limit: 10 };
       if (date) params.date = date;
@@ -51,7 +54,7 @@ export default function MealsPage() {
       const res = await apiClient.get<PaginatedResponse<Meal>>('/meals', params);
       setMeals(res.data);
       setTotal(res.total);
-    } catch (e) { /* error handled by interceptor */ }
+    } catch (e: any) { setError(e.message || '加载失败'); }
     setLoading(false);
   };
 
@@ -79,6 +82,7 @@ export default function MealsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
     const payload = {
       ...form,
       calories: form.calories ? Number(form.calories) : undefined,
@@ -94,17 +98,20 @@ export default function MealsPage() {
       }
       setShowModal(false);
       loadMeals();
-    } catch (e) { /* error handled */ }
+    } catch (e: any) { setError(e.message || '提交失败'); }
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm('确定要删除这条记录吗？')) return;
-    await apiClient.delete(`/meals/${id}`);
-    loadMeals();
+    try {
+      await apiClient.delete(`/meals/${id}`);
+      loadMeals();
+    } catch (e: any) { setError(e.message || '删除失败'); }
   };
 
   const totalPages = Math.ceil(total / 10);
 
+  if (!hydrated) return null;
   if (!isAuthenticated) return null;
 
   return (
@@ -114,6 +121,10 @@ export default function MealsPage() {
           <h1 className="text-2xl font-bold">饮食管理</h1>
           <button onClick={openCreate} className="btn btn-primary">+ 添加饮食</button>
         </div>
+
+        {error && (
+          <div className="bg-danger-50 border border-danger-200 rounded-lg p-3 text-sm text-danger-700">{error}</div>
+        )}
 
         {/* Filters */}
         <div className="card flex flex-wrap gap-4">

@@ -12,7 +12,7 @@ const CATEGORY_MAP: Record<string, string> = {
 };
 
 export default function ExpensesPage() {
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, hydrated } = useAuthStore();
   const router = useRouter();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [total, setTotal] = useState(0);
@@ -21,6 +21,7 @@ export default function ExpensesPage() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [stats, setStats] = useState<any>(null);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({
@@ -32,13 +33,15 @@ export default function ExpensesPage() {
   });
 
   useEffect(() => {
+    if (!hydrated) return;
     if (!isAuthenticated) { router.push('/login'); return; }
     loadExpenses();
     loadStats();
-  }, [isAuthenticated, page, category, startDate, endDate]);
+  }, [hydrated, isAuthenticated, page, category, startDate, endDate]);
 
   const loadExpenses = async () => {
     setLoading(true);
+    setError('');
     try {
       const params: any = { page, limit: 10 };
       if (category) params.category = category;
@@ -47,7 +50,7 @@ export default function ExpensesPage() {
       const res = await apiClient.get<PaginatedResponse<Expense>>('/expenses', params);
       setExpenses(res.data);
       setTotal(res.total);
-    } catch (e) { /* error handled */ }
+    } catch (e: any) { setError(e.message || '加载失败'); }
     setLoading(false);
   };
 
@@ -58,21 +61,23 @@ export default function ExpensesPage() {
       if (endDate) params.end_date = endDate;
       const res = await apiClient.get<any>('/expenses/stats', params);
       setStats(res);
-    } catch (e) { /* error handled */ }
+    } catch (e: any) { /* stats error non-critical */ }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
     try {
       await apiClient.post('/expenses', { ...form, amount: Number(form.amount) });
       setShowModal(false);
       loadExpenses();
       loadStats();
-    } catch (e) { /* error handled */ }
+    } catch (e: any) { setError(e.message || '提交失败'); }
   };
 
   const totalPages = Math.ceil(total / 10);
 
+  if (!hydrated) return null;
   if (!isAuthenticated) return null;
 
   return (
@@ -82,6 +87,10 @@ export default function ExpensesPage() {
           <h1 className="text-2xl font-bold">消费管理</h1>
           <button onClick={() => setShowModal(true)} className="btn btn-primary">+ 添加消费</button>
         </div>
+
+        {error && (
+          <div className="bg-danger-50 border border-danger-200 rounded-lg p-3 text-sm text-danger-700">{error}</div>
+        )}
 
         {/* Stats Cards */}
         {stats && (

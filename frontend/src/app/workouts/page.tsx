@@ -18,7 +18,7 @@ const WORKOUT_TYPES: Record<string, string> = {
 const INTENSITY_MAP: Record<string, string> = { LOW: '低', MEDIUM: '中', HIGH: '高' };
 
 export default function WorkoutsPage() {
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, hydrated } = useAuthStore();
   const router = useRouter();
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [total, setTotal] = useState(0);
@@ -26,6 +26,7 @@ export default function WorkoutsPage() {
   const [date, setDate] = useState('');
   const [workoutType, setWorkoutType] = useState('');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingWorkout, setEditingWorkout] = useState<Workout | null>(null);
   const [form, setForm] = useState({
@@ -43,12 +44,14 @@ export default function WorkoutsPage() {
   });
 
   useEffect(() => {
+    if (!hydrated) return;
     if (!isAuthenticated) { router.push('/login'); return; }
     loadWorkouts();
-  }, [isAuthenticated, page, date, workoutType]);
+  }, [hydrated, isAuthenticated, page, date, workoutType]);
 
   const loadWorkouts = async () => {
     setLoading(true);
+    setError('');
     try {
       const params: any = { page, limit: 10 };
       if (date) params.date = date;
@@ -56,7 +59,7 @@ export default function WorkoutsPage() {
       const res = await apiClient.get<PaginatedResponse<Workout>>('/workouts', params);
       setWorkouts(res.data);
       setTotal(res.total);
-    } catch (e) { /* error handled */ }
+    } catch (e: any) { setError(e.message || '加载失败'); }
     setLoading(false);
   };
 
@@ -86,6 +89,7 @@ export default function WorkoutsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
     const payload: any = {
       ...form,
       duration_minutes: form.duration_minutes ? Number(form.duration_minutes) : undefined,
@@ -103,17 +107,20 @@ export default function WorkoutsPage() {
       }
       setShowModal(false);
       loadWorkouts();
-    } catch (e) { /* error handled */ }
+    } catch (e: any) { setError(e.message || '提交失败'); }
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm('确定要删除这条记录吗？')) return;
-    await apiClient.delete(`/workouts/${id}`);
-    loadWorkouts();
+    try {
+      await apiClient.delete(`/workouts/${id}`);
+      loadWorkouts();
+    } catch (e: any) { setError(e.message || '删除失败'); }
   };
 
   const totalPages = Math.ceil(total / 10);
 
+  if (!hydrated) return null;
   if (!isAuthenticated) return null;
 
   return (
@@ -123,6 +130,10 @@ export default function WorkoutsPage() {
           <h1 className="text-2xl font-bold">训练管理</h1>
           <button onClick={openCreate} className="btn btn-primary">+ 添加训练</button>
         </div>
+
+        {error && (
+          <div className="bg-danger-50 border border-danger-200 rounded-lg p-3 text-sm text-danger-700">{error}</div>
+        )}
 
         <div className="card flex flex-wrap gap-4">
           <div>

@@ -8,12 +8,14 @@ interface User {
   gender?: string;
   age?: number;
   height?: number;
+  fitness_goal?: string;
 }
 
 interface AuthState {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  hydrated: boolean;
   error: string | null;
 
   // Actions
@@ -24,26 +26,47 @@ interface AuthState {
   register: (email: string, username: string, password: string) => Promise<void>;
   logout: () => void;
   getCurrentUser: () => Promise<void>;
+  init: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   isLoading: false,
   isAuthenticated: false,
+  hydrated: false,
   error: null,
 
   setUser: (user) => set({ user, isAuthenticated: !!user }),
   setLoading: (isLoading) => set({ isLoading }),
   setError: (error) => set({ error }),
 
+  init: async () => {
+    const token = apiClient.getToken();
+    if (!token) {
+      set({ hydrated: true });
+      return;
+    }
+    try {
+      const user = await apiClient.get<User>('/auth/me');
+      set({ user, isAuthenticated: true, hydrated: true });
+    } catch {
+      apiClient.clearToken();
+      set({ hydrated: true });
+    }
+  },
+
   login: async (email, password) => {
     set({ isLoading: true, error: null });
     try {
       const response = await apiClient.post<any>('/auth/login', { email, password });
       apiClient.setToken(response.access_token);
+      if (response.refresh_token) {
+        localStorage.setItem('refresh_token', response.refresh_token);
+      }
       set({
         user: response.user,
         isAuthenticated: true,
+        hydrated: true,
         isLoading: false,
       });
     } catch (error) {
@@ -62,9 +85,13 @@ export const useAuthStore = create<AuthState>((set) => ({
         password,
       });
       apiClient.setToken(response.access_token);
+      if (response.refresh_token) {
+        localStorage.setItem('refresh_token', response.refresh_token);
+      }
       set({
         user: response.user,
         isAuthenticated: true,
+        hydrated: true,
         isLoading: false,
       });
     } catch (error) {
@@ -76,7 +103,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   logout: () => {
     apiClient.clearToken();
-    set({ user: null, isAuthenticated: false });
+    set({ user: null, isAuthenticated: false, hydrated: true });
   },
 
   getCurrentUser: async () => {
@@ -84,9 +111,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const user = await apiClient.get<User>('/auth/me');
       set({ user, isAuthenticated: true, isLoading: false });
-    } catch (error) {
+    } catch {
       set({ isLoading: false });
-      // 如果获取失败，说明需要重新登录
     }
   },
 }));

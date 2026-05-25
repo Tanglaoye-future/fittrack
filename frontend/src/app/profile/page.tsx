@@ -7,10 +7,11 @@ import { RootLayout } from '@/components/common/RootLayout';
 import { apiClient } from '@/lib/api-client';
 
 export default function ProfilePage() {
-  const { user, isAuthenticated, getCurrentUser } = useAuthStore();
+  const { user, isAuthenticated, hydrated, getCurrentUser } = useAuthStore();
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
   const [form, setForm] = useState({
     username: '',
     gender: '',
@@ -21,6 +22,7 @@ export default function ProfilePage() {
   const [userStats, setUserStats] = useState<any>(null);
 
   useEffect(() => {
+    if (!hydrated) return;
     if (!isAuthenticated) { router.push('/login'); return; }
     if (user) {
       setForm({
@@ -32,17 +34,18 @@ export default function ProfilePage() {
       });
     }
     loadStats();
-  }, [isAuthenticated, user]);
+  }, [hydrated, isAuthenticated, user]);
 
   const loadStats = async () => {
     try {
       const stats = await apiClient.get<any>('/users/stats');
       setUserStats(stats);
-    } catch (e) { /* error handled */ }
+    } catch (e: any) { /* stats error non-critical */ }
   };
 
   const handleSave = async () => {
     setSaving(true);
+    setError('');
     try {
       const payload: any = {};
       if (form.username) payload.username = form.username;
@@ -53,10 +56,11 @@ export default function ProfilePage() {
       await apiClient.patch('/users/profile', payload);
       await getCurrentUser();
       setEditing(false);
-    } catch (e) { /* error handled */ }
+    } catch (e: any) { setError(e.message || '保存失败'); }
     setSaving(false);
   };
 
+  if (!hydrated) return null;
   if (!isAuthenticated || !user) return null;
 
   return (
@@ -73,6 +77,10 @@ export default function ProfilePage() {
             </div>
           )}
         </div>
+
+        {error && (
+          <div className="bg-danger-50 border border-danger-200 rounded-lg p-3 text-sm text-danger-700">{error}</div>
+        )}
 
         {/* Stats */}
         {userStats && (

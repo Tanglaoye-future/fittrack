@@ -14,7 +14,7 @@ import {
 const PIE_COLORS = ['#0ea5e9', '#22c55e', '#eab308', '#ef4444', '#8b5cf6', '#f97316'];
 
 export default function AnalyticsPage() {
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, hydrated } = useAuthStore();
   const router = useRouter();
   const [todayStr] = useState(new Date().toISOString().split('T')[0]);
   const [startDate, setStartDate] = useState(() => {
@@ -29,9 +29,10 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!hydrated) return;
     if (!isAuthenticated) { router.push('/login'); return; }
     loadAll();
-  }, [isAuthenticated, startDate, endDate]);
+  }, [hydrated, isAuthenticated, startDate, endDate]);
 
   const loadAll = async () => {
     setLoading(true);
@@ -46,7 +47,7 @@ export default function AnalyticsPage() {
       setCaloriesTrend(trend?.trend || []);
       setNutrition(nut);
       setExpenseAnalysis(exp);
-    } catch (e) { /* error handled */ }
+    } catch (e: any) { /* error handled */ }
     setLoading(false);
   };
 
@@ -60,6 +61,7 @@ export default function AnalyticsPage() {
     name: k, amount: Number(v.amount),
   })) : [];
 
+  if (!hydrated) return null;
   if (!isAuthenticated) return null;
 
   return (
