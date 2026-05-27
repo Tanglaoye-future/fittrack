@@ -1,0 +1,70 @@
+---
+description: Auto-review-and-gate workflow. After generating any code, schema, API spec, or design doc, automatically run a Reviewer subagent, fix P0/P1 issues, then commit. Do not ask the user to approve the review step.
+alwaysApply: true
+---
+
+# 自动评审 → 修复 → 入库 流程（强约束）
+
+每次生成以下任一类型的产物后，**必须自动**走完"评审 → 修复 → 入库"流程，**不要询问用户是否要评审**。
+
+## 适用范围
+
+触发自动评审的产物类型：
+
+| 类型 | 例子 |
+|---|---|
+| **后端代码** | NestJS 控制器/服务/模块、Prisma schema/migration、DTO、guard |
+| **前端代码** | React 组件、page、hook、store、lib |
+| **设计文档** | `docs/**/*_v2.md`、`docs/**/PRD*.md`、`docs/**/SCHEMA*.md`、`docs/**/API*.md` |
+| **配置** | `docker-compose.yml`、`tsconfig.json`、`prisma/schema.prisma` |
+| **测试** | spec / test / e2e |
+
+**不**触发的：README 微调、typo 修复、单条 comment 变更、本规则文件本身的修改。
+
+## 自动流程（5 步，不询问）
+
+```
+1. 生成产物
+2. 启动 Reviewer 子代理（readonly）
+3. 拿到评审报告 → 落盘到 docs/reviews/{date}_{topic}.md
+4. 自动修复所有 P0 + 关键 P1
+5. 修复后再次 self-check → 通过则 git commit
+```
+
+详细执行规范见 `docs/REVIEW_PROCESS.md`。
+
+## Reviewer 子代理调用模板
+
+启动评审时使用 `Task(subagent_type=generalPurpose, readonly=true)`，prompt 必须包含：
+
+- 评审对象的绝对路径清单
+- 6 维评分表（一致性 / 完整性 / 可执行性 / 正确性 / 风险 / 项目特定准则）
+- 项目特定准则：参考 `docs/UX_PRINCIPLES.md` 的 7 条认知负荷准则（针对前端 PR）
+- 输出格式要求：P0 / P1 / P2 分级 + 每条带"位置 + 详情 + 修复建议"
+- 严格挑刺要求：宁可挑出 30 个问题，不要漏掉 1 个 P0
+
+## 修复策略
+
+- **P0**：100% 必修，修复后才允许 commit
+- **P1**：≥ 80% 必修；剩余项需在 commit message 中列出 "Deferred P1" 清单
+- **P2**：择优修；可遗留到下次
+
+## 入库门槛（commit 前自检）
+
+- [ ] 所有 P0 已修复
+- [ ] 文档/代码内部一致（命名、字段、枚举对齐）
+- [ ] 评审报告已落盘到 `docs/reviews/`
+- [ ] 若修改了 schema，迁移文件已生成
+
+任一项未达标 → 不允许 commit，必须返回第 4 步继续修复。
+
+## 例外
+
+- 用户**明确说**"先不评审"或"直接 commit"时跳过本流程
+- 紧急 hotfix（用户标记 [hotfix]）：评审降级为 self-review，事后补独立评审
+
+## 与 UX_PRINCIPLES.md 的关系
+
+- 本规则管 **流程**（什么时候评审、由谁评审、修到什么程度才入库）
+- `UX_PRINCIPLES.md` 管 **内容**（评审 PR 时具体看什么）
+- 两者配合：自动评审时把 UX_PRINCIPLES 的 10 条 PR Checklist 作为前端代码的评审标准

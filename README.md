@@ -1,86 +1,114 @@
-# FitFlow - 健身饮食消费管理系统
+# FitFlow Pro — 职业健美运动员专业软件
 
-![FitFlow](https://img.shields.io/badge/Version-1.0.0-blue)
+![FitFlow Pro](https://img.shields.io/badge/Version-2.0.0--planning-blue)
 ![License](https://img.shields.io/badge/License-MIT-green)
-![Status](https://img.shields.io/badge/Status-MVP%20Development-orange)
+![Status](https://img.shields.io/badge/Status-v2%20Planning-orange)
 
-🏋️ 一站式健身数据管理平台 - 整合饮食、训练、消费与数据分析
+> **为职业健美运动员打造的"备赛操作系统" —— 把训练、饮食、消费、备赛周期、教练协同的全部数据，收敛在一个低认知负荷的入口中。**
 
-## 📋 目录
-- [项目概览](#项目概览)
-- [核心功能](#核心功能)
-- [技术栈](#技术栈)
-- [快速开始](#快速开始)
-- [项目结构](#项目结构)
-- [开发指南](#开发指南)
-- [API 文档](#api-文档)
-- [开发计划](#开发计划)
+---
 
-## 🎯 项目概览
+## ⚠️ 项目状态（请先读）
 
-**FitFlow** 是一款针对健身用户的**一体化数据管理平台**。用户可以在这个平台上：
+本仓库正处于 **v1 → v2 重构** 阶段。
 
-- 📝 **记录饮食**：轻松记录每日饮食，追踪热量和营养数据
-- 💪 **记录训练**：详细记录各类训练计划和成果
-- 💰 **管理消费**：统计健身相关消费，了解投入成本
-- 📊 **数据分析**：可视化展示长期趋势，发现数据规律
-- 📈 **身体数据**：记录体重、围度等身体指标变化
+- **v1（FitFlow 通用版，已停止开发）**：通用健身用户的 8 周 MVP；脚手架代码仍在 `backend/` `frontend/`，仅作历史参考。
+- **v2（FitFlow Pro 专业版，进行中）**：定位变更为**职业健美运动员专业软件**，12 周交付。**所有新工作请按 v2 文档进行**。
 
-### 用户痛点
-❌ 数据分散在多个应用中  
-❌ 难以形成完整的分析闭环  
-❌ 缺少长期趋势分析  
-❌ 无法获得成长反馈  
+### 📘 v2 核心文档（必读）
 
-### 产品愿景
-✅ 打造健身用户的**唯一数据中心**  
-✅ 提供**智能分析和洞察**  
-✅ 支持**数据导出和集成**  
+| 文档 | 内容 |
+|---|---|
+| [PRD_v2.md](docs/PRD_v2.md) | 产品定位、用户画像、3 个核心 Loop、模块全景、商业模式 |
+| [UX_PRINCIPLES.md](docs/UX_PRINCIPLES.md) | **强约束**：7 条认知负荷准则 + PR 验收 checklist |
+| [DATABASE_SCHEMA_v2.md](docs/DATABASE_SCHEMA_v2.md) | 完整数据模型（含训练三层、营养食材库、备赛周期、教练协同、PED 私域、离线幂等键） |
+| [API_DESIGN_v2.md](docs/API_DESIGN_v2.md) | 15 个模块的完整接口契约 + 权限矩阵 + 错误码 |
+| [PROJECT_TIMELINE_v2.md](docs/PROJECT_TIMELINE_v2.md) | 12 周交付计划 + 每周门槛 |
 
-## 🌟 核心功能
+### 🗂 v1 历史文档（仅供参考，不再维护）
 
-### 第一阶段 (MVP)
-- [x] **用户系统** - 注册、登录、个人资料
-- [x] **饮食管理** - 新增、编辑、统计饮食记录
-- [x] **训练管理** - 记录各类训练数据
-- [x] **消费管理** - 追踪健身相关消费
-- [x] **身体数据** - 记录体测指标
-- [x] **数据分析** - 图表展示、趋势分析
-- [x] **仪表板** - 每日概览和周汇总
+`docs/DATABASE_SCHEMA.md` / `docs/API_DESIGN.md` / `docs/PROJECT_TIMELINE.md` / `docs/PROJECT_STARTUP_REPORT.md` / `docs/INITIALIZATION_CHECKLIST.md` / `docs/DEVELOPMENT_STANDARDS.md` / `FitFlow_PRD_V1.docx`
 
-### 计划中的功能
-- [ ] **AI 饮食分析** - 基于 AI 的营养建议
-- [ ] **OCR 食物识别** - 通过图像识别食物
-- [ ] **社区体系** - 用户交流和分享
-- [ ] **AI 健身教练** - 个性化训练计划
-- [ ] **数据导出** - 支持多种格式导出
-- [ ] **离线模式** - 无网络环境支持
+---
 
-## 🛠 技术栈
+## 🎯 v2 产品概览
 
-### 前端
+### 一句话
+
+**FitFlow Pro 是面向职业健美运动员和健美教练的专业 PWA，目标是把备赛期间数百个微小决策的认知负荷降到最低。**
+
+### 核心用户
+
+- 🥇 **职业健美运动员**：备赛 16-20 周，每天 6 餐 + 1-2 训练 + 20+ 次补剂打卡
+- 🏆 **健美教练**：同时带 8-25 名学员，每周日批量看 check-in
+- 🥈 **高级业余选手**：无专职教练，靠产品当半个教练
+
+### 与 v1 的根本差异
+
+| 维度 | v1 通用版 | **v2 专业版** |
+|---|---|---|
+| 目标用户 | 普通健身爱好者 | 职业健美运动员 + 教练 |
+| 训练颗粒度 | 一条记录 = 一个动作 | 训练日 → 动作 → 单组（含 RIR/RPE/Tempo） |
+| 饮食颗粒度 | 自填食物名 + 估算热量 | 食材称重（g）+ 配方 + macros 自动反算 |
+| 消费颗粒度 | 6 个泛分类 | 12 个健美专属分类 + 月度预算 + ROI |
+| 备赛能力 | 无 | 5 阶段周期 + 自动 macros / cardio 推算 |
+| 教练协同 | 无 | 多对多 + 每周 check-in + 调整下发 |
+| 客户端 | Web | **Next.js PWA（离线优先 + 可装桌面）** |
+| 商业模式 | 免费 + 高级功能付费 | 运动员订阅 + 教练 SaaS 多席位 |
+
+完整设计理由见 [PRD_v2.md](docs/PRD_v2.md)。
+
+## 🌟 v2 模块全景（15 个模块）
+
 ```
-Next.js 13+          # React 全栈框架
-TypeScript           # 类型安全
-Tailwind CSS         # 样式框架
-React Query/SWR      # 数据获取
-Zustand              # 状态管理
-Recharts             # 数据可视化
+账户域:   Auth · Users
+训练域:   Exercises · TrainingPlans · Workouts (Session → Exercise → Set)
+营养域:   Foods · Recipes · Meals · Supplements
+体测域:   BodyRecords · ProgressPhotos
+备赛域:   Competitions · CheckIns
+消费域:   Expenses (12 类 + 预算 + ROI)
+教练域:   Coach (多对多 + 字段级权限)
+私域:     Controlled (PED 模块，默认关闭，商店版 tree-shake)
+```
+
+详细模块 / 字段 / 接口见 [DATABASE_SCHEMA_v2.md](docs/DATABASE_SCHEMA_v2.md) 与 [API_DESIGN_v2.md](docs/API_DESIGN_v2.md)。
+
+## 🔑 三个核心闭环（Loop）
+
+- **Loop A — 训练日**：开始训练 → 默认值预填 → 单组 ≤ 3 click ≤ 5s 完成 → 自动倒计时
+- **Loop B — 饮食日**：计划餐 1 click 打卡；自由餐 ≤ 8s；macros 系统反算（零数学）
+- **Loop C — 周 Check-in**：周日预填 → 拍 4 角度照 → 教练 24h 回复 → 系统自动重排下周餐
+
+## 🛠 v2 技术栈
+
+### 前端（PWA 优先）
+```
+Next.js 14 (App Router)   # React 全栈框架
+TypeScript (strict)
+Tailwind CSS
+TanStack Query            # 数据获取
+Zustand                   # 状态管理
+IndexedDB (Dexie)         # 离线存储
+Service Worker            # 离线 + Push
+Recharts                  # 图表
 ```
 
 ### 后端
 ```
-NestJS               # Node.js 框架
-TypeScript           # 类型安全
-PostgreSQL           # 数据库
-Prisma               # ORM
-JWT                  # 身份认证
+NestJS 10
+TypeScript (strict)
+PostgreSQL 16
+Prisma 5
+JWT (access 30min / refresh 30d)
+Pino logger
 ```
 
 ### 基础设施
 ```
-Docker/Docker Compose # 容器化
-GitHub Actions        # CI/CD
+Docker / Docker Compose
+对象存储 (OSS / S3)        # 照片、PED 加密导出
+GitHub Actions             # CI/CD
+Sentry + Uptime            # 监控告警
 ```
 
 ## 🚀 快速开始
@@ -142,59 +170,51 @@ npm run dev
 - ⚙️ 后端 API: http://localhost:3001/api/v1
 - 📚 API 文档: http://localhost:3001/api/docs
 
-## 📁 项目结构
+## 📁 项目结构（v2 目标态）
 
 ```
 fittrack/
-├── docs/                          # 项目文档
-│   ├── DATABASE_SCHEMA.md         # 数据库设计
-│   ├── API_DESIGN.md              # API 规范
-│   ├── DEVELOPMENT_STANDARDS.md   # 开发规范
-│   ├── PROJECT_TIMELINE.md        # 项目计划
-│   └── FitFlow_PRD_V1.docx       # 产品需求文档
+├── docs/
+│   ├── PRD_v2.md                  ★ v2 产品定位（必读）
+│   ├── UX_PRINCIPLES.md           ★ v2 认知负荷宪法（必读）
+│   ├── DATABASE_SCHEMA_v2.md      ★ v2 数据模型
+│   ├── API_DESIGN_v2.md           ★ v2 接口契约
+│   ├── PROJECT_TIMELINE_v2.md     ★ v2 12 周计划
+│   └── legacy_v1/                 (v1 文档归档，仅参考)
 │
-├── backend/                       # 后端项目
+├── backend/                       # NestJS
 │   ├── src/
-│   │   ├── app.module.ts
-│   │   ├── main.ts
-│   │   ├── auth/                  # 认证模块
-│   │   ├── users/                 # 用户模块
-│   │   ├── meals/                 # 饮食模块
-│   │   ├── workouts/              # 训练模块
-│   │   ├── expenses/              # 消费模块
-│   │   ├── body-records/          # 身体数据模块
-│   │   ├── analytics/             # 数据分析模块
-│   │   └── common/                # 公共组件
-│   ├── prisma/
-│   │   ├── schema.prisma          # 数据库 Schema
-│   │   └── migrations/            # 数据库迁移
-│   ├── test/                      # 测试文件
-│   └── package.json
+│   │   ├── auth/  users/
+│   │   ├── exercises/             # ← W3 新增
+│   │   ├── training-plans/        # ← W3 新增
+│   │   ├── workouts/              # ← W4 重写（Session / Set 三层）
+│   │   ├── foods/                 # ← W5 新增
+│   │   ├── recipes/               # ← W5 新增
+│   │   ├── meals/                 # ← W6 重写
+│   │   ├── supplements/           # ← W6 新增
+│   │   ├── body-records/          # ← W7 升级
+│   │   ├── photos/                # ← W7 新增
+│   │   ├── expenses/              # ← W7 升级（12 类 + ROI）
+│   │   ├── competitions/          # ← W8 新增
+│   │   ├── check-ins/             # ← W9 新增（Loop C）
+│   │   ├── coach/                 # ← W9 新增
+│   │   ├── analytics/             # ← W10 升级
+│   │   ├── controlled/            # ← W10 新增（PED 私域，build flag 可移除）
+│   │   ├── system/                # ← W11 离线同步
+│   │   └── common/
+│   └── prisma/schema.prisma       # ← W2 完全重写
 │
-├── frontend/                      # 前端项目
-│   ├── src/
-│   │   ├── app/                   # Next.js App Router
-│   │   ├── components/            # React 组件
-│   │   │   ├── common/            # 通用组件
-│   │   │   ├── layout/            # 布局组件
-│   │   │   └── features/          # 功能组件
-│   │   ├── hooks/                 # 自定义 Hooks
-│   │   ├── lib/                   # 工具函数
-│   │   ├── styles/                # 全局样式
-│   │   ├── types/                 # TypeScript 类型
-│   │   └── utils/                 # 工具函数
-│   ├── public/                    # 静态资源
-│   └── package.json
+├── frontend/                      # Next.js 14 PWA
+│   └── src/
+│       ├── app/                   # ← W3 起按 v2 UX 重做
+│       ├── components/
+│       ├── lib/sync/              # ← W11 离线同步层
+│       └── lib/offline-db/        # ← W11 IndexedDB
 │
-├── scripts/                       # 项目脚本
-│   ├── init.sh                    # Linux/Mac 初始化脚本
-│   ├── init.ps1                   # Windows 初始化脚本
-│   └── db-init.sql                # 数据库初始化 SQL
-│
-├── docker-compose.yml             # Docker 编排配置
-├── .gitignore
-├── README.md                      # 本文件
-└── FitFlow_PRD_V1.docx           # PRD 文档
+├── scripts/
+├── docker-compose.yml
+├── README.md
+└── FitFlow_PRD_V1.docx           (已废弃，待移入 docs/legacy_v1/)
 ```
 
 ## 📚 开发指南
@@ -295,17 +315,22 @@ GET    /api/v1/analytics/calories-trend
 GET    /api/v1/analytics/nutrition-analysis
 ```
 
-## 📅 开发计划
+## 📅 v2 开发计划（12 周）
 
-详见 [PROJECT_TIMELINE.md](docs/PROJECT_TIMELINE.md)
+详见 [PROJECT_TIMELINE_v2.md](docs/PROJECT_TIMELINE_v2.md)
 
-| 阶段 | 时间 | 目标 |
-|------|------|------|
-| 🔴 基础设施 | 第 1-2 周 | 项目框架、数据库设计 |
-| 🟠 后端开发 | 第 3-4 周 | 完整 API 实现 |
-| 🟡 前端开发 | 第 5-6 周 | 所有页面实现 |
-| 🟢 集成优化 | 第 7 周 | 联调、性能优化 |
-| 🔵 上线上线 | 第 8 周 | 文档、部署、上线 |
+| 周 | 阶段 | 关键产出 |
+|---|---|---|
+| W1  | 定位冻结 + UX 原型 | PRD 签字、Figma 原型、5 名选手访谈 |
+| W2  | 数据模型 v2 | Prisma schema 重写 + 15 模块骨架 |
+| W3–W4 | 训练域（**Loop A**） | 单组打卡 ≤ 5s（健身房真人测试达标） |
+| W5–W6 | 营养域（**Loop B**） | 计划餐 1 click、自由餐 ≤ 8s |
+| W7  | 体测 + 消费 | 照片上传、ROI 报表 |
+| W8  | 备赛域 | 16 周备赛自动 macros |
+| W9  | 教练域（**Loop C**） | 1 教练 5 学员完整 check-in 流程 |
+| W10 | 分析 + PED 受控模块 | 商店版 tree-shake 验证 |
+| W11 | PWA 离线 + Push | 断网 30min 后 100% 同步 |
+| W12 | 灰度上线 | 5 名职业选手种子使用 |
 
 ## 🧪 测试
 
@@ -382,6 +407,6 @@ MIT License - 详见 [LICENSE](LICENSE)
 
 ---
 
-**Made with ❤️ by FitFlow Team**
+**Built for professional bodybuilders — by FitFlow Pro Team**
 
-Last Updated: 2026-05-25 | Version: 1.0.0
+Last Updated: 2026-05-27 | Version: 2.0.0-planning
