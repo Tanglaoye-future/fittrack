@@ -1,0 +1,66 @@
+---
+description: FitFlow Pro v2 项目记忆——定位、冻结决策、文档地图、Loop、工程约定（每次对话自动加载）
+alwaysApply: true
+---
+
+# FitFlow Pro — 项目记忆
+
+## 身份
+
+- **FitFlow Pro**：职业健美运动员专业软件（非通用健身 App）
+- **仓库**：`fittrack`；v1 脚手架在 `backend/` `frontend/` 仅作参考
+- **当前阶段**：v2 设计文档已 R2 评审通过并入库；实现按 `docs/PROJECT_TIMELINE_v2.md`（12 周）
+
+## 最高产品原则
+
+> 每一次改动都要问：运动员每天的总点击数和总思考数变多了还是变少了？**变多即砍。**
+
+细则：`docs/UX_PRINCIPLES.md`（7 条认知负荷准则 + §9 PR checklist）
+
+## 冻结决策（勿擅自改）
+
+- v2 **独立** Prisma schema；migration：`20260603000000_v2_init`
+- MVP **含教练**（多对多、模块级 `scope_*`、周 check-in）
+- **PED 私域**：`ControlledExpense` 不进普通 expenses；教练用 `ControlledViewToken`，运动员用 `ControlledPinSession`
+- 客户端：**PWA 离线优先**；计划餐实体 `MealPlanTemplate` / `ScheduledMeal`
+- 「默认值」：`LastValueCache`（非裸查历史 SetEntry）
+
+## 必读文档（改代码前）
+
+| 文件 | 何时读 |
+|---|---|
+| `docs/PRD_v2.md` | 功能边界、商业模式 |
+| `docs/DATABASE_SCHEMA_v2.md` | 任何 Prisma / 迁移 |
+| `docs/API_DESIGN_v2.md` | 任何 NestJS 路由 / DTO |
+| `docs/UX_PRINCIPLES.md` | 任何前端交互 |
+| `AGENTS.md` | 项目记忆总览 |
+| `docs/reviews/` | 最近评审结论 |
+
+**禁止**以 `docs/DATABASE_SCHEMA.md`（v1）或 v1 代码结构作为新功能依据。
+
+## 三个 Loop（North Star 实现顺序）
+
+- **A 训练**：`WorkoutSession` → `SessionExercise` → `SetEntry`；`/workouts/sessions/start` 返回 `suggested_sets`（LAST_VALUE → TEMPLATE → EMPTY）
+- **B 饮食**：`GET /meals/planned/today` + `POST /meals/quick-log`（`scheduled_meal_id`）
+- **C 教练**：`WeeklyCheckIn` + 教练 dashboard 红黄绿（规则在 API §14.1）
+
+## 工程流程（与 auto-review 配合）
+
+1. 生成后端/前端/schema/设计文档 → **自动** Reviewer 子代理评审
+2. 报告落盘 `docs/reviews/{date}_{topic}_rN.md`
+3. 修完所有 P0 + ≥80% P1 → self-check → 才可 commit
+4. 用户明确「先不评审」或「直接 commit」时例外
+
+## 技术栈速记
+
+- Backend: NestJS, Prisma 5, PostgreSQL 16, JWT（access 30m / refresh 30d 持久化可撤销）
+- Frontend: Next.js 14 App Router, TanStack Query, Zustand, PWA + IndexedDB + SW
+- 中文食材搜索：`pg_trgm`（非 `simple` tokenizer）
+
+## 评审状态（2026-05-27）
+
+- Commit `117aa99`：v2 五文档 + 评审流程 + R2 修订
+- R2：**8/8 P0、17/17 必修 P1 已 close**
+- Deferred：P1-20 / P1-24 / P1-27；P2-31~40
+
+完整记忆见仓库根目录 `AGENTS.md`。

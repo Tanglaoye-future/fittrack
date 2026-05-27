@@ -1,5 +1,6 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// FitFlow Pro v2 Schema
+// 完全替代 v1；v1 归档于 prisma/legacy_v1/schema.prisma
+// Migration: 20260603000000_v2_init
 
 generator client {
   provider = "prisma-client-js"
@@ -10,28 +11,56 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ============= Users (用户表) =============
-model User {
-  id                String   @id @default(uuid())
-  email             String   @unique
-  username          String   @unique
-  passwordHash      String   @map("password_hash")
-  avatar_url        String?
-  gender            Gender?
-  age               Int?
-  height            Decimal? @db.Decimal(5, 2) // cm
-  initial_weight    Decimal? @db.Decimal(6, 2) // kg
-  fitness_goal      FitnessGoal?
-  created_at        DateTime @default(now()) @map("created_at")
-  updated_at        DateTime @updatedAt @map("updated_at")
-  deleted_at        DateTime? @map("deleted_at")
+// ============= §3 账户域 =============
 
-  // 关联关系
-  meals             Meal[]
-  workouts          Workout[]
-  expenses          Expense[]
-  body_records      BodyRecord[]
-  daily_summaries   DailySummary[]
+model User {
+  id            String  @id @default(uuid())
+  email         String  @unique
+  phone         String? @unique
+  password_hash String
+  username      String  @unique
+  avatar_url    String?
+
+  // 个人档案
+  gender            Gender?
+  birth_date        DateTime? @db.Date
+  height_cm         Decimal?  @db.Decimal(5, 2)
+  initial_weight_kg Decimal?  @db.Decimal(6, 2)
+
+  // 偏好
+  timezone    String     @default("Asia/Shanghai")
+  unit_system UnitSystem @default(METRIC)
+  language    String     @default("zh-CN")
+
+  // 角色
+  is_athlete Boolean @default(true)
+  is_coach   Boolean @default(false)
+
+  // 订阅
+  subscription_tier       SubscriptionTier @default(FREE)
+  subscription_expires_at DateTime?
+
+  // PED 模块
+  controlled_module_enabled  Boolean @default(false)
+  controlled_module_pin_hash String?
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+
+  // 关联
+  training_plans   TrainingPlan[]
+  workout_sessions WorkoutSession[]
+  meal_logs        MealLog[]
+  body_records     BodyRecord[]
+  competitions     CompetitionGoal[]
+  expenses         Expense[]
+  refresh_tokens   RefreshToken[]
+  reminder_rules   ReminderRule[]
+  subscription     Subscription?
+
+  coach_links_as_coach   CoachAthleteLink[] @relation("coach")
+  coach_links_as_athlete CoachAthleteLink[] @relation("athlete")
 
   @@map("users")
 }
@@ -42,155 +71,1494 @@ enum Gender {
   OTHER
 }
 
-enum FitnessGoal {
-  GAIN_MUSCLE
-  LOSE_FAT
-  MAINTENANCE
+enum UnitSystem {
+  METRIC
+  IMPERIAL
 }
 
-// ============= Meals (饮食记录表) =============
-model Meal {
-  id                String   @id @default(uuid())
-  user_id           String   @map("user_id")
-  meal_type         MealType
-  food_name         String
-  description       String?
-  calories          Decimal? @db.Decimal(8, 2)
-  protein           Decimal? @db.Decimal(6, 2)
-  carbs             Decimal? @db.Decimal(6, 2)
-  fat               Decimal? @db.Decimal(6, 2)
-  portion_size      String?
-  meal_date         DateTime @db.Date
-  meal_time         DateTime? @db.Time
-  created_at        DateTime @default(now()) @map("created_at")
-  updated_at        DateTime @updatedAt @map("updated_at")
-  deleted_at        DateTime? @map("deleted_at")
+enum SubscriptionTier {
+  FREE
+  ATHLETE_PRO
+  COACH
+}
 
-  // 关联关系
-  user              User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+model RefreshToken {
+  id           String    @id @default(uuid())
+  user_id      String
+  token_hash   String    @unique // SHA-256；明文不入库
+  device_label String?
+  user_agent   String?
+  ip           String?
+  expires_at   DateTime
+  revoked_at   DateTime?
+  rotated_to   String? // 轮换链；旧 token 指向新 token id
+  created_at   DateTime  @default(now())
+  last_used_at DateTime?
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, revoked_at])
+  @@map("refresh_tokens")
+}
+
+model Subscription {
+  user_id              String             @id
+  tier                 SubscriptionTier
+  status               SubscriptionStatus @default(ACTIVE)
+  cycle                BillingCycle       @default(MONTHLY)
+  current_period_start DateTime
+  current_period_end   DateTime
+  cancel_at_period_end Boolean            @default(false)
+  athlete_capacity     Int? // 教练档基础 30 席位
+  created_at           DateTime           @default(now())
+  updated_at           DateTime           @updatedAt
+
+  user     User               @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  seats    SubscriptionSeat[]
+  invoices Invoice[]
+
+  @@map("subscriptions")
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  EXPIRED
+}
+
+enum BillingCycle {
+  MONTHLY
+  YEARLY
+}
+
+model SubscriptionSeat {
+  id              String    @id @default(uuid())
+  subscription_id String
+  athlete_user_id String
+  link_id         String // CoachAthleteLink.id
+  assigned_at     DateTime  @default(now())
+  released_at     DateTime?
+
+  subscription Subscription @relation(fields: [subscription_id], references: [user_id], onDelete: Cascade)
+
+  @@unique([subscription_id, athlete_user_id])
+  @@map("subscription_seats")
+}
+
+model Invoice {
+  id              String        @id @default(uuid())
+  subscription_id String
+  amount          Decimal       @db.Decimal(12, 2)
+  currency        String        @default("CNY")
+  period_start    DateTime
+  period_end      DateTime
+  status          InvoiceStatus @default(OPEN)
+  paid_at         DateTime?
+  external_ref    String? // 支付平台单号
+  created_at      DateTime      @default(now())
+
+  subscription Subscription @relation(fields: [subscription_id], references: [user_id], onDelete: Cascade)
+
+  @@index([subscription_id, period_start])
+  @@map("invoices")
+}
+
+enum InvoiceStatus {
+  OPEN
+  PAID
+  VOID
+  FAILED
+}
+
+// ============= §4 训练域（Loop A 核心）=============
+
+model Exercise {
+  id                String          @id @default(uuid())
+  name_zh           String
+  name_en           String
+  description       String?
+  primary_muscle    MuscleGroup
+  secondary_muscles MuscleGroup[]
+  equipment         Equipment
+  movement_pattern  MovementPattern
+  video_url         String?
+  thumbnail_url     String?
+  is_official       Boolean         @default(true)
+  created_by        String? // user_id（用户自建时）
+  created_at        DateTime        @default(now())
+
+  template_exercises TemplateExercise[]
+  session_exercises  SessionExercise[]
+  personal_records   PersonalRecord[]
+
+  @@unique([name_en])
+  @@map("exercises")
+}
+
+enum MuscleGroup {
+  CHEST
+  BACK_LATS
+  BACK_TRAPS
+  SHOULDERS_FRONT
+  SHOULDERS_SIDE
+  SHOULDERS_REAR
+  BICEPS
+  TRICEPS
+  FOREARMS
+  CORE_ABS
+  CORE_OBLIQUES
+  GLUTES
+  QUADS
+  HAMSTRINGS
+  CALVES
+  NECK
+}
+
+enum Equipment {
+  BARBELL
+  DUMBBELL
+  MACHINE
+  CABLE
+  BODYWEIGHT
+  KETTLEBELL
+  BAND
+  OTHER
+}
+
+enum MovementPattern {
+  PUSH
+  PULL
+  SQUAT
+  HINGE
+  CARRY
+  ROTATION
+  ISOLATION
+}
+
+model TrainingPlan {
+  id          String    @id @default(uuid())
+  user_id     String
+  name        String
+  description String?
+  weeks       Int
+  is_active   Boolean   @default(false)
+  start_date  DateTime? @db.Date
+  end_date    DateTime? @db.Date
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
+  deleted_at  DateTime?
+
+  user      User               @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  templates TrainingTemplate[]
+
+  @@index([user_id])
+  @@map("training_plans")
+}
+
+model TrainingTemplate {
+  id                   String  @id @default(uuid())
+  plan_id              String
+  name                 String
+  day_of_week          Int? // 0–6（NULL = 不固定）
+  estimated_minutes    Int?
+  rest_seconds_default Int     @default(90)
+  notes                String?
+
+  plan      TrainingPlan       @relation(fields: [plan_id], references: [id], onDelete: Cascade)
+  exercises TemplateExercise[]
+  sessions  WorkoutSession[]
+
+  @@map("training_templates")
+}
+
+model TemplateExercise {
+  id              String   @id @default(uuid())
+  template_id     String
+  exercise_id     String
+  order_index     Int
+  target_sets     Int
+  target_reps_min Int?
+  target_reps_max Int?
+  target_rir      Decimal? @db.Decimal(3, 1)
+  target_rpe      Decimal? @db.Decimal(3, 1)
+  rest_seconds    Int?
+  tempo           String?
+  notes           String?
+
+  // 独立写端点 → 强制幂等（§0.1）
+  client_op_id String   @unique
+  client_ts    DateTime
+
+  template TrainingTemplate @relation(fields: [template_id], references: [id], onDelete: Cascade)
+  exercise Exercise         @relation(fields: [exercise_id], references: [id])
+
+  @@unique([template_id, order_index])
+  @@map("template_exercises")
+}
+
+model WorkoutSession {
+  id            String    @id @default(uuid())
+  user_id       String
+  template_id   String? // NULL = 自由训练
+  session_date  DateTime  @db.Date
+  start_time    DateTime?
+  end_time      DateTime?
+  overall_rpe   Decimal?  @db.Decimal(3, 1)
+  bodyweight_kg Decimal?  @db.Decimal(6, 2)
+  notes         String?
+
+  client_op_id String   @unique
+  client_ts    DateTime
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+
+  user      User              @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  template  TrainingTemplate? @relation(fields: [template_id], references: [id])
+  exercises SessionExercise[]
+
+  @@index([user_id, session_date])
+  @@map("workout_sessions")
+}
+
+model SessionExercise {
+  id                   String  @id @default(uuid())
+  session_id           String
+  exercise_id          String
+  order_index          Int
+  template_exercise_id String?
+  notes                String?
+
+  // 独立写端点 → 强制幂等（§0.1）
+  client_op_id String   @unique
+  client_ts    DateTime
+
+  session  WorkoutSession @relation(fields: [session_id], references: [id], onDelete: Cascade)
+  exercise Exercise       @relation(fields: [exercise_id], references: [id])
+  sets     SetEntry[]
+
+  @@unique([session_id, order_index])
+  @@map("session_exercises")
+}
+
+model SetEntry {
+  id                  String   @id @default(uuid())
+  session_exercise_id String
+  user_id             String // 冗余：按用户查避免两层 join
+  exercise_id         String // 冗余：PR 检测高频按 (user, exercise) 查
+  session_date        DateTime @db.Date // 冗余：按 (user, date) 查训练
+
+  set_index Int
+  set_type  SetType
+
+  weight_kg        Decimal? @db.Decimal(6, 2)
+  reps             Int?
+  duration_seconds Int? // 平板支撑 / 有氧用
+  distance_m       Decimal? @db.Decimal(8, 2) // 有氧用
+
+  rir          Decimal? @db.Decimal(3, 1)
+  rpe          Decimal? @db.Decimal(3, 1)
+  tempo        String? // 格式 "ECC-PAUSE-CON-PAUSE"，例 "3-1-1-0"
+  rest_seconds Int?
+
+  is_failure Boolean @default(false)
+  is_warmup  Boolean @default(false)
+
+  client_op_id String   @unique
+  client_ts    DateTime
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+
+  session_exercise SessionExercise @relation(fields: [session_exercise_id], references: [id], onDelete: Cascade)
+
+  @@index([session_exercise_id, set_index])
+  @@index([user_id, session_date])
+  @@index([user_id, exercise_id]) // PR 检测主索引
+  @@map("set_entries")
+}
+
+enum SetType {
+  WARMUP
+  WORKING
+  DROP
+  RESTPAUSE
+  MYOREP
+  CLUSTER
+  AMRAP
+}
+
+model PersonalRecord {
+  id           String   @id @default(uuid())
+  user_id      String
+  exercise_id  String
+  record_type  PRType
+  value        Decimal  @db.Decimal(10, 2)
+  reps         Int?
+  weight_kg    Decimal? @db.Decimal(6, 2)
+  achieved_at  DateTime
+  set_entry_id String?
+
+  exercise Exercise @relation(fields: [exercise_id], references: [id])
+
+  @@unique([user_id, exercise_id, record_type])
+  @@index([user_id, exercise_id])
+  @@map("personal_records")
+}
+
+enum PRType {
+  ONE_RM
+  VOLUME_BEST
+  REP_BEST
+}
+
+// ============= §5 营养域（Loop B 核心）=============
+
+model Food {
+  id      String  @id @default(uuid())
+  name_zh String
+  name_en String?
+  brand   String?
+  barcode String? @unique
+
+  // per 100g 标准化
+  kcal_per_100g         Decimal  @db.Decimal(8, 2)
+  protein_per_100g      Decimal  @db.Decimal(6, 2)
+  carbs_per_100g        Decimal  @db.Decimal(6, 2)
+  fat_per_100g          Decimal  @db.Decimal(6, 2)
+  fiber_per_100g        Decimal? @db.Decimal(6, 2)
+  sugar_per_100g        Decimal? @db.Decimal(6, 2)
+  sodium_mg_per_100g    Decimal? @db.Decimal(8, 2)
+  potassium_mg_per_100g Decimal? @db.Decimal(8, 2)
+
+  // 单位换算
+  default_serving_g Decimal? @db.Decimal(8, 2)
+  serving_name      String?
+
+  category    FoodCategory
+  is_official Boolean      @default(true)
+  created_by  String? // user_id
+  verified    Boolean      @default(false)
+  created_at  DateTime     @default(now())
+
+  recipe_ingredients         RecipeIngredient[]
+  meal_items                 MealItem[]
+  scheduled_meal_ingredients ScheduledMealIngredient[]
+
+  @@index([name_zh])
+  @@index([barcode])
+  @@map("foods")
+}
+
+enum FoodCategory {
+  MEAT_PROTEIN
+  SEAFOOD
+  DAIRY
+  EGGS
+  GRAIN
+  VEGETABLE
+  FRUIT
+  NUTS_SEEDS
+  OIL_FAT
+  SAUCE_CONDIMENT
+  BEVERAGE
+  PROTEIN_POWDER
+  MEAL_REPLACEMENT
+  PROCESSED_FOOD
+  FAST_FOOD
+  RESTAURANT
+  OTHER
+}
+
+model Recipe {
+  id            String  @id @default(uuid())
+  user_id       String
+  name          String
+  description   String?
+  serving_count Int     @default(1)
+
+  // 缓存（写入时自动反算）
+  total_kcal    Decimal? @db.Decimal(8, 2)
+  total_protein Decimal? @db.Decimal(6, 2)
+  total_carbs   Decimal? @db.Decimal(6, 2)
+  total_fat     Decimal? @db.Decimal(6, 2)
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+
+  ingredients     RecipeIngredient[]
+  meal_items      MealItem[]
+  scheduled_meals ScheduledMeal[]
+
+  @@index([user_id])
+  @@map("recipes")
+}
+
+model RecipeIngredient {
+  id          String  @id @default(uuid())
+  recipe_id   String
+  food_id     String
+  grams       Decimal @db.Decimal(8, 2)
+  order_index Int
+
+  recipe Recipe @relation(fields: [recipe_id], references: [id], onDelete: Cascade)
+  food   Food   @relation(fields: [food_id], references: [id])
+
+  @@map("recipe_ingredients")
+}
+
+model MealLog {
+  id          String   @id @default(uuid())
+  user_id     String
+  meal_slot   MealSlot
+  consumed_at DateTime // UTC
+  meal_date   DateTime @db.Date // 用户本地日期（聚合用）
+  is_planned  Boolean  @default(false)
+  notes       String?
+
+  // 缓存反算（items 变更时由 service 更新）
+  total_kcal    Decimal? @db.Decimal(8, 2)
+  total_protein Decimal? @db.Decimal(6, 2)
+  total_carbs   Decimal? @db.Decimal(6, 2)
+  total_fat     Decimal? @db.Decimal(6, 2)
+
+  client_op_id String   @unique
+  client_ts    DateTime
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+
+  user  User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  items MealItem[]
 
   @@index([user_id, meal_date])
-  @@map("meals")
+  @@map("meal_logs")
 }
 
-enum MealType {
+enum MealSlot {
+  PRE_WORKOUT
+  INTRA_WORKOUT
+  POST_WORKOUT
   BREAKFAST
+  MORNING_SNACK
   LUNCH
+  AFTERNOON_SNACK
+  PRE_DINNER
   DINNER
-  SNACK
+  LATE_NIGHT
 }
 
-// ============= Workouts (训练记录表) =============
-model Workout {
-  id                String   @id @default(uuid())
-  user_id           String   @map("user_id")
-  workout_type      WorkoutType
-  exercise_name     String
-  duration_minutes  Int?
-  calories_burned   Decimal? @db.Decimal(8, 2)
-  intensity         Intensity?
-  sets              Int?
-  reps              Int?
-  weight            Decimal? @db.Decimal(6, 2)
-  notes             String?
-  workout_date      DateTime @db.Date
-  workout_time      DateTime? @db.Time
-  created_at        DateTime @default(now()) @map("created_at")
-  updated_at        DateTime @updatedAt @map("updated_at")
-  deleted_at        DateTime? @map("deleted_at")
+model MealItem {
+  id          String  @id @default(uuid())
+  meal_log_id String
+  food_id     String? // XOR: food_id 与 recipe_id 必须且仅有一个
+  recipe_id   String?
+  grams       Decimal @db.Decimal(8, 2)
 
-  // 关联关系
-  user              User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  // 计算快照（防止 food macros 被修改后旧记录跟着变）
+  snapshot_kcal    Decimal @db.Decimal(8, 2)
+  snapshot_protein Decimal @db.Decimal(6, 2)
+  snapshot_carbs   Decimal @db.Decimal(6, 2)
+  snapshot_fat     Decimal @db.Decimal(6, 2)
 
-  @@index([user_id, workout_date])
-  @@map("workouts")
+  client_op_id String   @unique
+  client_ts    DateTime
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+
+  meal_log MealLog @relation(fields: [meal_log_id], references: [id], onDelete: Cascade)
+  food     Food?   @relation(fields: [food_id], references: [id])
+  recipe   Recipe? @relation(fields: [recipe_id], references: [id])
+
+  @@map("meal_items")
 }
 
-enum WorkoutType {
-  CARDIO
-  STRENGTH
-  FLEXIBILITY
-  SPORTS
-  OTHER
+// 计划餐实体（Loop B：今日计划餐 1 click 打卡）
+
+model MealPlanTemplate {
+  id              String  @id @default(uuid())
+  user_id         String
+  name            String
+  prep_cycle_id   String? // 关联备赛周期
+  phase_config_id String? // 关联某一阶段配置
+
+  // 计划总 macros（缓存）
+  total_kcal      Int
+  total_protein_g Int
+  total_carbs_g   Int
+  total_fat_g     Int
+
+  is_active    Boolean  @default(false)
+  client_op_id String   @unique
+  client_ts    DateTime
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+
+  prep_cycle      PrepCycle?      @relation("PrepMealPlans", fields: [prep_cycle_id], references: [id])
+  scheduled_meals ScheduledMeal[]
+
+  @@index([user_id, is_active])
+  @@map("meal_plan_templates")
 }
 
-enum Intensity {
-  LOW
-  MEDIUM
-  HIGH
+model ScheduledMeal {
+  id               String   @id @default(uuid())
+  template_id      String
+  order_index      Int
+  meal_slot        MealSlot
+  target_time      String // "07:00" 用户本地时区
+  target_kcal      Int
+  target_protein_g Int
+  target_carbs_g   Int
+  target_fat_g     Int
+  recipe_id        String? // 整餐用某配方；或用 ingredients
+  notes            String?
+
+  template    MealPlanTemplate          @relation(fields: [template_id], references: [id], onDelete: Cascade)
+  recipe      Recipe?                   @relation(fields: [recipe_id], references: [id])
+  ingredients ScheduledMealIngredient[]
+
+  @@unique([template_id, order_index])
+  @@map("scheduled_meals")
 }
 
-// ============= Expenses (消费记录表) =============
-model Expense {
-  id                String   @id @default(uuid())
-  user_id           String   @map("user_id")
-  category          ExpenseCategory
-  amount            Decimal  @db.Decimal(10, 2)
-  currency          String   @default("CNY")
-  description       String?
-  expense_date      DateTime @db.Date
-  created_at        DateTime @default(now()) @map("created_at")
-  updated_at        DateTime @updatedAt @map("updated_at")
-  deleted_at        DateTime? @map("deleted_at")
+model ScheduledMealIngredient {
+  id                String  @id @default(uuid())
+  scheduled_meal_id String
+  food_id           String
+  grams             Decimal @db.Decimal(8, 2)
 
-  // 关联关系
-  user              User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  scheduled_meal ScheduledMeal @relation(fields: [scheduled_meal_id], references: [id], onDelete: Cascade)
+  food           Food          @relation(fields: [food_id], references: [id])
 
-  @@index([user_id, expense_date])
-  @@map("expenses")
+  @@map("scheduled_meal_ingredients")
 }
 
-enum ExpenseCategory {
-  FOOD
-  GYM
-  SUPPLEMENTS
-  EQUIPMENT
-  APPAREL
-  OTHER
+model WaterLog {
+  id          String   @id @default(uuid())
+  user_id     String
+  ml          Int
+  consumed_at DateTime
+  log_date    DateTime @db.Date
+
+  client_op_id String   @unique
+  client_ts    DateTime
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+
+  @@index([user_id, log_date])
+  @@map("water_logs")
 }
 
-// ============= BodyRecords (身体数据表) =============
+model ElectrolyteLog {
+  id           String   @id @default(uuid())
+  user_id      String
+  sodium_mg    Decimal? @db.Decimal(8, 2)
+  potassium_mg Decimal? @db.Decimal(8, 2)
+  magnesium_mg Decimal? @db.Decimal(8, 2)
+  source       String?
+  consumed_at  DateTime
+  log_date     DateTime @db.Date
+
+  client_op_id String   @unique
+  client_ts    DateTime
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+
+  @@index([user_id, log_date])
+  @@map("electrolyte_logs")
+}
+
+// "昨天怎么做今天就怎么做" 的物理基础（UX §1）
+model LastValueCache {
+  id          String          @id @default(uuid())
+  user_id     String
+  domain      LastValueDomain
+  key         String // SET→"{exercise_id}:{set_index}"  MEAL_ITEM→"{slot}:{food_id}"
+  value       Json
+  occurred_at DateTime // 来源记录的 client_ts（防乱序回放）
+  updated_at  DateTime        @updatedAt
+
+  @@unique([user_id, domain, key])
+  @@index([user_id, domain])
+  @@map("last_value_cache")
+}
+
+enum LastValueDomain {
+  SET
+  MEAL_ITEM
+  SUPPLEMENT_DOSE
+}
+
+model MacroTarget {
+  id            String       @id @default(uuid())
+  user_id       String
+  target_date   DateTime     @db.Date
+  kcal          Int
+  protein_g     Int
+  carbs_g       Int
+  fat_g         Int
+  source        TargetSource
+  prep_cycle_id String?
+  created_at    DateTime     @default(now())
+
+  @@unique([user_id, target_date])
+  @@map("macro_targets")
+}
+
+enum TargetSource {
+  AUTO_PREP
+  MANUAL
+  COACH
+}
+
+// ============= §6 补剂模块 =============
+
+model SupplementSchedule {
+  id        String  @id @default(uuid())
+  user_id   String
+  name      String
+  time_slot String // "07:00" or "PRE_WORKOUT"
+  is_active Boolean @default(true)
+
+  client_op_id String   @unique
+  client_ts    DateTime
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+
+  items SupplementItem[]
+
+  @@map("supplement_schedules")
+}
+
+model SupplementItem {
+  id            String   @id @default(uuid())
+  schedule_id   String
+  name          String
+  brand         String?
+  dose          Decimal? @db.Decimal(8, 2)
+  unit          String?
+  notes         String?
+  is_controlled Boolean  @default(false)
+
+  schedule SupplementSchedule @relation(fields: [schedule_id], references: [id], onDelete: Cascade)
+
+  @@map("supplement_items")
+}
+
+model SupplementLog {
+  id            String   @id @default(uuid())
+  user_id       String
+  schedule_id   String?
+  item_id       String?
+  name          String // 冗余存储，模板删除后仍可查
+  dose          Decimal? @db.Decimal(8, 2)
+  unit          String?
+  taken_at      DateTime
+  log_date      DateTime @db.Date
+  is_controlled Boolean  @default(false)
+
+  client_op_id String   @unique
+  client_ts    DateTime
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+
+  @@index([user_id, log_date])
+  @@map("supplement_logs")
+}
+
+// ============= §7 体测域 =============
+
 model BodyRecord {
-  id                    String   @id @default(uuid())
-  user_id               String   @map("user_id")
-  weight                Decimal? @db.Decimal(6, 2) // kg
-  body_fat_percentage   Decimal? @db.Decimal(5, 2) // %
-  muscle_mass           Decimal? @db.Decimal(6, 2) // kg
-  chest                 Decimal? @db.Decimal(6, 2) // cm
-  waist                 Decimal? @db.Decimal(6, 2) // cm
-  hip                   Decimal? @db.Decimal(6, 2) // cm
-  arm                   Decimal? @db.Decimal(6, 2) // cm
-  thigh                 Decimal? @db.Decimal(6, 2) // cm
-  measurement_date      DateTime @db.Date
-  created_at            DateTime @default(now()) @map("created_at")
-  updated_at            DateTime @updatedAt @map("updated_at")
+  id               String   @id @default(uuid())
+  user_id          String
+  measurement_date DateTime @db.Date
 
-  // 关联关系
-  user                  User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  // 称重
+  morning_weight_kg Decimal? @db.Decimal(6, 2)
+  evening_weight_kg Decimal? @db.Decimal(6, 2)
 
+  // 身体成分
+  body_fat_percentage Decimal? @db.Decimal(5, 2)
+  muscle_mass_kg      Decimal? @db.Decimal(6, 2)
+  visceral_fat_index  Decimal? @db.Decimal(4, 1)
+
+  // 围度（cm）
+  chest_cm       Decimal? @db.Decimal(6, 2)
+  shoulder_cm    Decimal? @db.Decimal(6, 2)
+  waist_cm       Decimal? @db.Decimal(6, 2)
+  hip_cm         Decimal? @db.Decimal(6, 2)
+  arm_left_cm    Decimal? @db.Decimal(6, 2)
+  arm_right_cm   Decimal? @db.Decimal(6, 2)
+  thigh_left_cm  Decimal? @db.Decimal(6, 2)
+  thigh_right_cm Decimal? @db.Decimal(6, 2)
+  calf_left_cm   Decimal? @db.Decimal(6, 2)
+  calf_right_cm  Decimal? @db.Decimal(6, 2)
+  neck_cm        Decimal? @db.Decimal(6, 2)
+
+  // 主观指标
+  subjective_condition  Int? // 1–10
+  water_retention_score Int? // 1–5
+  sleep_hours           Decimal? @db.Decimal(3, 1)
+  energy_score          Int? // 1–5
+
+  notes String?
+
+  client_op_id String   @unique
+  client_ts    DateTime
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+
+  user   User            @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  photos ProgressPhoto[]
+
+  @@unique([user_id, measurement_date])
   @@index([user_id, measurement_date])
   @@map("body_records")
 }
 
-// ============= DailySummary (每日汇总表) =============
-model DailySummary {
-  id                String   @id @default(uuid())
-  user_id           String   @map("user_id")
-  summary_date      DateTime @db.Date
-  total_calories    Int?
-  total_protein     Decimal? @db.Decimal(8, 2)
-  total_carbs       Decimal? @db.Decimal(8, 2)
-  total_fat         Decimal? @db.Decimal(8, 2)
-  total_calories_burned Int?
-  workouts_count    Int      @default(0)
-  meals_count       Int      @default(0)
-  created_at        DateTime @default(now()) @map("created_at")
-  updated_at        DateTime @updatedAt @map("updated_at")
+model ProgressPhoto {
+  id                 String     @id @default(uuid())
+  user_id            String
+  body_record_id     String?
+  weekly_check_in_id String?
+  photo_date         DateTime   @db.Date
+  url                String
+  thumbnail_url      String?
+  angle              PhotoAngle
+  pose               PhotoPose
+  width              Int?
+  height             Int?
+  file_size_kb       Int?
+  visibility         Visibility @default(SELF_ONLY)
 
-  // 关联关系
-  user              User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  client_op_id String   @unique
+  client_ts    DateTime
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+
+  body_record     BodyRecord?    @relation(fields: [body_record_id], references: [id], onDelete: SetNull)
+  weekly_check_in WeeklyCheckIn? @relation("CheckInPhotos", fields: [weekly_check_in_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id, photo_date])
+  @@index([weekly_check_in_id])
+  @@map("progress_photos")
+}
+
+enum PhotoAngle {
+  FRONT
+  BACK
+  SIDE_LEFT
+  SIDE_RIGHT
+}
+
+enum PhotoPose {
+  RELAXED
+  FRONT_DOUBLE_BICEPS
+  BACK_DOUBLE_BICEPS
+  SIDE_CHEST
+  SIDE_TRICEPS
+  MOST_MUSCULAR
+  ABS_AND_THIGHS
+  QUARTER_TURN_LEFT
+  QUARTER_TURN_RIGHT
+  OTHER
+}
+
+enum Visibility {
+  SELF_ONLY
+  COACH_VISIBLE
+  PUBLIC_OPT_IN
+}
+
+// ============= §8 备赛域 =============
+
+model CompetitionGoal {
+  id               String   @id @default(uuid())
+  user_id          String
+  name             String
+  federation       String? // IFBB / NPC / CBBA
+  category         String? // 古典 / 健体 / 健美
+  stage_date       DateTime @db.Date
+  location         String?
+  target_weight_kg Decimal? @db.Decimal(6, 2)
+  notes            String?
+  is_active        Boolean  @default(true)
+
+  client_op_id String   @unique
+  client_ts    DateTime
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+
+  user        User        @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  prep_cycles PrepCycle[]
+
+  @@map("competition_goals")
+}
+
+model PrepCycle {
+  id            String    @id @default(uuid())
+  user_id       String
+  goal_id       String
+  start_date    DateTime  @db.Date
+  end_date      DateTime  @db.Date // = goal.stage_date
+  current_phase PrepPhase @default(PREP)
+  weeks_total   Int
+  // weeks_remaining 不存：运行时算 ceil((end_date - today_in_user_tz) / 7)
+
+  start_weight_kg    Decimal? @db.Decimal(6, 2)
+  start_body_fat_pct Decimal? @db.Decimal(5, 2)
+
+  is_active    Boolean  @default(true)
+  client_op_id String   @unique
+  client_ts    DateTime
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  goal                CompetitionGoal    @relation(fields: [goal_id], references: [id], onDelete: Cascade)
+  phases              PhaseConfig[]
+  check_ins           WeeklyCheckIn[]
+  meal_plan_templates MealPlanTemplate[] @relation("PrepMealPlans")
+
+  @@index([user_id])
+  @@map("prep_cycles")
+}
+
+enum PrepPhase {
+  OFFSEASON
+  PREP
+  PEAK_WEEK
+  STAGE_DAY
+  REBOUND
+}
+
+model PhaseConfig {
+  id            String    @id @default(uuid())
+  prep_cycle_id String
+  phase         PrepPhase
+  week_start    Int // 从第几周开始（1-indexed）
+  week_end      Int
+
+  // Macros
+  kcal      Int
+  protein_g Int
+  carbs_g   Int
+  fat_g     Int
+
+  // 有氧
+  cardio_sessions_per_week   Int     @default(0)
+  cardio_minutes_per_session Int     @default(0)
+  cardio_type                String?
+
+  daily_steps Int?
+  refeed_day  Int? // 每周第几天 refeed
+  notes       String?
+
+  client_op_id String   @unique
+  client_ts    DateTime
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  prep_cycle PrepCycle @relation(fields: [prep_cycle_id], references: [id], onDelete: Cascade)
+
+  @@map("phase_configs")
+}
+
+// PEAK week 操作模板（7 天水/钠/糖逐日配置）
+model PeakProtocolTemplate {
+  id          String  @id @default(uuid())
+  user_id     String? // null = 官方内置模板
+  name        String
+  description String?
+
+  // 长度固定 7，按 stage_date 倒数 D-7..D-0
+  daily_water_ml  Int[]
+  daily_sodium_mg Int[]
+  daily_carbs_g   Int[]
+  daily_protein_g Int[]
+  daily_fat_g     Int[]
+
+  notes_per_day Json
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@map("peak_protocol_templates")
+}
+
+model WeeklyCheckIn {
+  id            String   @id @default(uuid())
+  user_id       String
+  prep_cycle_id String?
+  week_index    Int
+  check_in_date DateTime @db.Date
+
+  // 自动预填（服务端聚合过去 7 天）
+  avg_morning_weight   Decimal? @db.Decimal(6, 2)
+  weight_change_kg     Decimal? @db.Decimal(6, 2)
+  avg_kcal_actual      Int?
+  avg_steps            Int?
+  trainings_completed  Int?
+  cardio_minutes_total Int?
+
+  // 手填
+  subjective_condition Int?
+  hunger_score         Int?
+  sleep_quality_score  Int?
+  stress_score         Int?
+  athlete_notes        String?
+
+  // 教练反馈（coach_adjustment JSON 拆列）
+  coach_response_at                 DateTime?
+  coach_notes                       String?
+  coach_adjustment_kcal_delta       Int?
+  coach_adjustment_protein_delta_g  Int?
+  coach_adjustment_carbs_delta_g    Int?
+  coach_adjustment_fat_delta_g      Int?
+  coach_adjustment_cardio_min_delta Int?
+  coach_adjustment_steps_delta      Int?
+  coach_adjustment_effective_from   DateTime? @db.Date
+
+  status CheckInStatus @default(PENDING)
+
+  client_op_id String   @unique
+  client_ts    DateTime
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+
+  prep_cycle PrepCycle?      @relation(fields: [prep_cycle_id], references: [id], onDelete: SetNull)
+  photos     ProgressPhoto[] @relation("CheckInPhotos")
+
+  @@index([user_id, check_in_date])
+  @@map("weekly_check_ins")
+}
+
+enum CheckInStatus {
+  PENDING
+  SUBMITTED
+  COACH_REVIEWED
+  ACKNOWLEDGED
+}
+
+// ============= §9 消费域 =============
+
+model Expense {
+  id           String          @id @default(uuid())
+  user_id      String
+  category     ExpenseCategory
+  amount       Decimal         @db.Decimal(12, 2)
+  currency     String          @default("CNY")
+  description  String?
+  expense_date DateTime        @db.Date
+
+  linked_food_id            String?
+  linked_supplement_item_id String?
+  linked_competition_id     String?
+  recurring_id              String?
+  receipt_photo_url         String?
+
+  client_op_id String   @unique
+  client_ts    DateTime
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, expense_date])
+  @@index([user_id, category])
+  @@map("expenses")
+}
+
+enum ExpenseCategory {
+  FOOD_GROCERY
+  DINING_OUT
+  SUPPLEMENT
+  COACH_FEE
+  GYM_MEMBERSHIP
+  EQUIPMENT
+  APPAREL_POSING
+  COMPETITION_FEE
+  TRAVEL_COMPETITION
+  RECOVERY
+  OTHER
+}
+
+// PED 支出独立隔离，不进 /expenses 普通接口（§9.1 R2 修订 P0-8）
+model ControlledExpense {
+  id                  String   @id @default(uuid())
+  user_id             String
+  controlled_cycle_id String?
+  amount              Decimal  @db.Decimal(12, 2)
+  currency            String   @default("CNY")
+  compound            String?
+  description         String?
+  expense_date        DateTime @db.Date
+
+  client_op_id String   @unique
+  client_ts    DateTime
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+
+  @@index([user_id, expense_date])
+  @@map("controlled_expenses")
+}
+
+model BudgetMonth {
+  id           String  @id @default(uuid())
+  user_id      String
+  year         Int
+  month        Int
+  total_budget Decimal @db.Decimal(12, 2)
+
+  client_op_id String   @unique
+  client_ts    DateTime
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  lines BudgetCategoryLine[]
+
+  @@unique([user_id, year, month])
+  @@map("budget_months")
+}
+
+model BudgetCategoryLine {
+  id              String          @id @default(uuid())
+  budget_month_id String
+  category        ExpenseCategory
+  amount          Decimal         @db.Decimal(12, 2)
+
+  budget_month BudgetMonth @relation(fields: [budget_month_id], references: [id], onDelete: Cascade)
+
+  @@unique([budget_month_id, category])
+  @@map("budget_category_lines")
+}
+
+model RecurringExpense {
+  id            String          @id @default(uuid())
+  user_id       String
+  name          String
+  category      ExpenseCategory
+  amount        Decimal         @db.Decimal(12, 2)
+  cycle         RecurringCycle
+  next_run_date DateTime        @db.Date
+  is_active     Boolean         @default(true)
+
+  client_op_id String   @unique
+  client_ts    DateTime
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+
+  @@index([user_id, next_run_date])
+  @@map("recurring_expenses")
+}
+
+enum RecurringCycle {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+// ============= §10 教练协同域 =============
+
+model CoachProfile {
+  user_id          String   @id
+  certifications   String[]
+  specialties      String[]
+  bio              String?
+  hourly_rate      Decimal? @db.Decimal(10, 2)
+  currency         String   @default("CNY")
+  athlete_capacity Int      @default(25)
+
+  @@map("coach_profiles")
+}
+
+model CoachAthleteLink {
+  id         String       @id @default(uuid())
+  coach_id   String
+  athlete_id String
+  status     LinkStatus   @default(PENDING)
+  invited_by InviteSource
+
+  // 模块级权限（booleans，便于索引+类型安全）
+  scope_training    Boolean @default(true)
+  scope_nutrition   Boolean @default(true)
+  scope_body_basic  Boolean @default(true)
+  scope_body_photos Boolean @default(false)
+  scope_expenses    Boolean @default(false)
+  scope_controlled  Boolean @default(false)
+
+  started_at  DateTime?
+  ended_at    DateTime?
+  monthly_fee Decimal?  @db.Decimal(10, 2)
+
+  client_op_id String   @unique
+  client_ts    DateTime
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  coach   User @relation("coach", fields: [coach_id], references: [id])
+  athlete User @relation("athlete", fields: [athlete_id], references: [id])
+
+  @@unique([coach_id, athlete_id])
+  @@index([coach_id, status])
+  @@index([athlete_id, status])
+  // 数据库迁移补 partial unique（保证 Athlete Pro 同一时刻最多 1 个 ACTIVE 教练）：
+  //   CREATE UNIQUE INDEX coach_link_active_one_per_athlete
+  //     ON coach_athlete_links(athlete_id) WHERE status = 'ACTIVE';
+  @@map("coach_athlete_links")
+}
+
+enum LinkStatus {
+  PENDING
+  ACTIVE
+  PAUSED
+  ENDED
+}
+
+enum InviteSource {
+  COACH
+  ATHLETE
+}
+
+model CoachInvitation {
+  id            String    @id @default(uuid())
+  coach_id      String
+  invite_code   String    @unique // 8 位 base32 短码
+  athlete_email String?
+  expires_at    DateTime
+  accepted_at   DateTime?
+  accepted_by   String? // user_id
+  revoked_at    DateTime?
+  created_at    DateTime  @default(now())
+
+  @@index([coach_id])
+  @@index([invite_code])
+  @@map("coach_invitations")
+}
+
+// CoachComment 去多态 FK（P0-2）：target_id 为应用层多态，不做数据库 FK
+model CoachComment {
+  id              String        @id @default(uuid())
+  coach_id        String
+  athlete_id      String
+  target_type     CommentTarget
+  target_id       String
+  content         String
+  is_actionable   Boolean       @default(false)
+  acknowledged_at DateTime?
+
+  client_op_id String   @unique
+  client_ts    DateTime
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+
+  @@index([athlete_id, target_type, target_id])
+  @@index([coach_id])
+  @@map("coach_comments")
+}
+
+enum CommentTarget {
+  CHECK_IN
+  SESSION
+  MEAL
+  PHOTO
+  BODY_RECORD
+}
+
+model ReminderRule {
+  id            String          @id @default(uuid())
+  user_id       String
+  rule_type     ReminderType
+  schedule_expr String // cron 或 "RELATIVE:-30m:WORKOUT_START"
+  channel       ReminderChannel @default(PUSH)
+  payload       Json?
+  enabled       Boolean         @default(true)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, rule_type, enabled])
+  @@map("reminder_rules")
+}
+
+enum ReminderType {
+  PRE_WORKOUT_30M
+  REST_BETWEEN_SETS
+  MEAL_DUE
+  PROTEIN_DEFICIT_NIGHT
+  CHECKIN_SUNDAY_20
+  COACH_REPLY_RECEIVED
+  PEAK_WEEK_T_MINUS_7
+}
+
+enum ReminderChannel {
+  PUSH
+  EMAIL
+}
+
+// ============= §11 分析域 =============
+
+model DailySummary {
+  id           String   @id @default(uuid())
+  user_id      String
+  summary_date DateTime @db.Date
+
+  // 营养
+  total_kcal    Int?
+  total_protein Decimal? @db.Decimal(8, 2)
+  total_carbs   Decimal? @db.Decimal(8, 2)
+  total_fat     Decimal? @db.Decimal(8, 2)
+  total_fiber   Decimal? @db.Decimal(8, 2)
+  meals_count   Int      @default(0)
+
+  // 训练
+  workout_minutes Int      @default(0)
+  total_volume_kg Decimal? @db.Decimal(12, 2)
+  total_sets      Int      @default(0)
+  avg_rpe         Decimal? @db.Decimal(3, 1)
+
+  // 水分 & 步数
+  water_ml          Int      @default(0)
+  morning_weight_kg Decimal? @db.Decimal(6, 2)
+  steps             Int?
+
+  // Macro 达成率
+  kcal_target     Int?
+  kcal_target_pct Decimal? @db.Decimal(5, 2)
+
+  // 北极星：完整日标记
+  is_complete Boolean @default(false)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 
   @@unique([user_id, summary_date])
   @@index([user_id, summary_date])
-  @@map("daily_summary")
+  @@index([user_id, is_complete])
+  @@map("daily_summaries")
+}
+
+// ============= §12 系统域 =============
+
+model SyncEvent {
+  id             String     @id @default(uuid())
+  user_id        String
+  client_op_id   String     @unique
+  entity_type    String // "SetEntry" / "MealLog"
+  entity_id      String?
+  operation      String // CREATE / UPDATE / DELETE
+  status         SyncStatus
+  conflict_field String?
+  resolution     String? // LWW / MERGE / MANUAL
+  received_at    DateTime   @default(now())
+
+  @@index([user_id, received_at])
+  @@map("sync_events")
+}
+
+enum SyncStatus {
+  OK
+  CONFLICT
+  FAILED
+}
+
+model PushSubscription {
+  id         String   @id @default(uuid())
+  user_id    String
+  endpoint   String   @unique
+  p256dh     String
+  auth       String
+  user_agent String?
+  created_at DateTime @default(now())
+
+  @@index([user_id])
+  @@map("push_subscriptions")
+}
+
+model AuditLog {
+  id            String   @id @default(uuid())
+  actor_user_id String
+  action        String
+  target_type   String?
+  target_id     String?
+  ip            String?
+  user_agent    String?
+  created_at    DateTime @default(now())
+
+  @@index([actor_user_id, created_at])
+  @@index([action, created_at])
+  @@map("audit_logs")
+}
+
+// ============= §14 受控物质（PED）子模块 =============
+
+model ControlledCycle {
+  id              String    @id @default(uuid())
+  user_id         String
+  name            String
+  start_date      DateTime  @db.Date
+  end_date        DateTime? @db.Date
+  notes_encrypted String? // 客户端加密后存储
+  is_active       Boolean   @default(true)
+
+  client_op_id String   @unique
+  client_ts    DateTime
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+
+  protocol_items ControlledProtocolItem[]
+  doses          ControlledDoseLog[]
+  bloodwork      BloodworkResult[]
+
+  @@index([user_id])
+  @@map("controlled_cycles")
+}
+
+model ControlledProtocolItem {
+  id             String   @id @default(uuid())
+  cycle_id       String
+  compound       String // "Test E" / "Trenbolone"
+  weekly_dose_mg Decimal? @db.Decimal(8, 2)
+  frequency      String? // "E3D" / "EOD" / "ED"
+  route          String? // "IM" / "SC" / "Oral"
+  week_start     Int
+  week_end       Int
+
+  cycle ControlledCycle @relation(fields: [cycle_id], references: [id], onDelete: Cascade)
+
+  @@map("controlled_protocol_items")
+}
+
+model ControlledDoseLog {
+  id             String   @id @default(uuid())
+  cycle_id       String?
+  user_id        String
+  compound       String
+  dose_mg        Decimal  @db.Decimal(8, 2)
+  route          String?
+  injection_site String?
+  taken_at       DateTime
+  log_date       DateTime @db.Date
+
+  client_op_id String   @unique
+  client_ts    DateTime
+
+  cycle ControlledCycle? @relation(fields: [cycle_id], references: [id])
+
+  @@index([user_id, log_date])
+  @@map("controlled_dose_logs")
+}
+
+model BloodworkResult {
+  id        String   @id @default(uuid())
+  user_id   String
+  cycle_id  String?
+  test_date DateTime @db.Date
+  lab_name  String?
+
+  total_test_ng_dl   Decimal? @db.Decimal(8, 2)
+  free_test_pg_ml    Decimal? @db.Decimal(8, 2)
+  estradiol_pg_ml    Decimal? @db.Decimal(8, 2)
+  hematocrit_pct     Decimal? @db.Decimal(5, 2)
+  hemoglobin_g_dl    Decimal? @db.Decimal(5, 2)
+  hdl_mg_dl          Decimal? @db.Decimal(6, 2)
+  ldl_mg_dl          Decimal? @db.Decimal(6, 2)
+  alt_u_l            Decimal? @db.Decimal(6, 2)
+  ast_u_l            Decimal? @db.Decimal(6, 2)
+  creatinine_mg_dl   Decimal? @db.Decimal(5, 2)
+  blood_pressure_sys Int?
+  blood_pressure_dia Int?
+  raw_report_url     String?
+
+  client_op_id String   @unique
+  client_ts    DateTime
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+
+  cycle ControlledCycle? @relation(fields: [cycle_id], references: [id])
+
+  @@index([user_id, test_date])
+  @@map("bloodwork_results")
+}
+
+// 本人 PIN 验证后的临时 session token（5 min TTL）
+model ControlledPinSession {
+  id            String    @id @default(uuid())
+  user_id       String
+  token_hash    String    @unique // SHA-256
+  issued_at     DateTime  @default(now())
+  expires_at    DateTime
+  revoked_at    DateTime?
+  fail_attempts Int       @default(0) // PIN 暴力破解防御
+  locked_until  DateTime? // 5 次错误锁 15 分钟
+  ip            String?
+  user_agent    String?
+
+  @@index([user_id, expires_at])
+  @@map("controlled_pin_sessions")
+}
+
+// 运动员授予教练的脱敏视图 token（默认 7 天有效，可撤销）
+model ControlledViewToken {
+  id         String              @id @default(uuid())
+  athlete_id String
+  coach_id   String
+  link_id    String // CoachAthleteLink.id
+  token_hash String              @unique
+  scope      ControlledViewScope @default(SUMMARY)
+  issued_at  DateTime            @default(now())
+  expires_at DateTime
+  revoked_at DateTime?
+
+  @@index([athlete_id, coach_id])
+  @@map("controlled_view_tokens")
+}
+
+enum ControlledViewScope {
+  SUMMARY
+  FULL
 }

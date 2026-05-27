@@ -1,0 +1,196 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============= Users (用户表) =============
+model User {
+  id                String   @id @default(uuid())
+  email             String   @unique
+  username          String   @unique
+  passwordHash      String   @map("password_hash")
+  avatar_url        String?
+  gender            Gender?
+  age               Int?
+  height            Decimal? @db.Decimal(5, 2) // cm
+  initial_weight    Decimal? @db.Decimal(6, 2) // kg
+  fitness_goal      FitnessGoal?
+  created_at        DateTime @default(now()) @map("created_at")
+  updated_at        DateTime @updatedAt @map("updated_at")
+  deleted_at        DateTime? @map("deleted_at")
+
+  // 关联关系
+  meals             Meal[]
+  workouts          Workout[]
+  expenses          Expense[]
+  body_records      BodyRecord[]
+  daily_summaries   DailySummary[]
+
+  @@map("users")
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum FitnessGoal {
+  GAIN_MUSCLE
+  LOSE_FAT
+  MAINTENANCE
+}
+
+// ============= Meals (饮食记录表) =============
+model Meal {
+  id                String   @id @default(uuid())
+  user_id           String   @map("user_id")
+  meal_type         MealType
+  food_name         String
+  description       String?
+  calories          Decimal? @db.Decimal(8, 2)
+  protein           Decimal? @db.Decimal(6, 2)
+  carbs             Decimal? @db.Decimal(6, 2)
+  fat               Decimal? @db.Decimal(6, 2)
+  portion_size      String?
+  meal_date         DateTime @db.Date
+  meal_time         DateTime? @db.Time
+  created_at        DateTime @default(now()) @map("created_at")
+  updated_at        DateTime @updatedAt @map("updated_at")
+  deleted_at        DateTime? @map("deleted_at")
+
+  // 关联关系
+  user              User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, meal_date])
+  @@map("meals")
+}
+
+enum MealType {
+  BREAKFAST
+  LUNCH
+  DINNER
+  SNACK
+}
+
+// ============= Workouts (训练记录表) =============
+model Workout {
+  id                String   @id @default(uuid())
+  user_id           String   @map("user_id")
+  workout_type      WorkoutType
+  exercise_name     String
+  duration_minutes  Int?
+  calories_burned   Decimal? @db.Decimal(8, 2)
+  intensity         Intensity?
+  sets              Int?
+  reps              Int?
+  weight            Decimal? @db.Decimal(6, 2)
+  notes             String?
+  workout_date      DateTime @db.Date
+  workout_time      DateTime? @db.Time
+  created_at        DateTime @default(now()) @map("created_at")
+  updated_at        DateTime @updatedAt @map("updated_at")
+  deleted_at        DateTime? @map("deleted_at")
+
+  // 关联关系
+  user              User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, workout_date])
+  @@map("workouts")
+}
+
+enum WorkoutType {
+  CARDIO
+  STRENGTH
+  FLEXIBILITY
+  SPORTS
+  OTHER
+}
+
+enum Intensity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+// ============= Expenses (消费记录表) =============
+model Expense {
+  id                String   @id @default(uuid())
+  user_id           String   @map("user_id")
+  category          ExpenseCategory
+  amount            Decimal  @db.Decimal(10, 2)
+  currency          String   @default("CNY")
+  description       String?
+  expense_date      DateTime @db.Date
+  created_at        DateTime @default(now()) @map("created_at")
+  updated_at        DateTime @updatedAt @map("updated_at")
+  deleted_at        DateTime? @map("deleted_at")
+
+  // 关联关系
+  user              User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, expense_date])
+  @@map("expenses")
+}
+
+enum ExpenseCategory {
+  FOOD
+  GYM
+  SUPPLEMENTS
+  EQUIPMENT
+  APPAREL
+  OTHER
+}
+
+// ============= BodyRecords (身体数据表) =============
+model BodyRecord {
+  id                    String   @id @default(uuid())
+  user_id               String   @map("user_id")
+  weight                Decimal? @db.Decimal(6, 2) // kg
+  body_fat_percentage   Decimal? @db.Decimal(5, 2) // %
+  muscle_mass           Decimal? @db.Decimal(6, 2) // kg
+  chest                 Decimal? @db.Decimal(6, 2) // cm
+  waist                 Decimal? @db.Decimal(6, 2) // cm
+  hip                   Decimal? @db.Decimal(6, 2) // cm
+  arm                   Decimal? @db.Decimal(6, 2) // cm
+  thigh                 Decimal? @db.Decimal(6, 2) // cm
+  measurement_date      DateTime @db.Date
+  created_at            DateTime @default(now()) @map("created_at")
+  updated_at            DateTime @updatedAt @map("updated_at")
+
+  // 关联关系
+  user                  User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, measurement_date])
+  @@map("body_records")
+}
+
+// ============= DailySummary (每日汇总表) =============
+model DailySummary {
+  id                String   @id @default(uuid())
+  user_id           String   @map("user_id")
+  summary_date      DateTime @db.Date
+  total_calories    Int?
+  total_protein     Decimal? @db.Decimal(8, 2)
+  total_carbs       Decimal? @db.Decimal(8, 2)
+  total_fat         Decimal? @db.Decimal(8, 2)
+  total_calories_burned Int?
+  workouts_count    Int      @default(0)
+  meals_count       Int      @default(0)
+  created_at        DateTime @default(now()) @map("created_at")
+  updated_at        DateTime @updatedAt @map("updated_at")
+
+  // 关联关系
+  user              User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, summary_date])
+  @@index([user_id, summary_date])
+  @@map("daily_summary")
+}
