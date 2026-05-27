@@ -1,6 +1,12 @@
 import { create } from 'zustand';
 import { apiClient } from '@/lib/api-client';
 
+interface AuthResponse {
+  access_token: string;
+  refresh_token?: string;
+  user: User;
+}
+
 interface User {
   id: string;
   email: string;
@@ -58,7 +64,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   login: async (email, password) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await apiClient.post<any>('/auth/login', { email, password });
+      const response = await apiClient.post<AuthResponse>('/auth/login', { email, password });
       apiClient.setToken(response.access_token);
       if (response.refresh_token) {
         localStorage.setItem('refresh_token', response.refresh_token);
@@ -79,7 +85,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   register: async (email, username, password) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await apiClient.post<any>('/auth/register', {
+      const response = await apiClient.post<AuthResponse>('/auth/register', {
         email,
         username,
         password,

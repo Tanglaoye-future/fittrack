@@ -1,6 +1,6 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
 
-interface ApiResponse<T = any> {
+interface ApiResponse<T = unknown> {
   code: number;
   message: string;
   data: T;
@@ -10,7 +10,7 @@ interface ApiResponse<T = any> {
 interface ApiError {
   code: number;
   message: string;
-  errors?: Record<string, any>;
+  errors?: Record<string, unknown>;
 }
 
 class ApiClient {
@@ -59,7 +59,7 @@ class ApiClient {
   /**
    * GET 请求
    */
-  async get<T = any>(url: string, params?: Record<string, any>): Promise<T> {
+  async get<T = unknown>(url: string, params?: Record<string, unknown>): Promise<T> {
     try {
       const response = await this.client.get<ApiResponse<T>>(url, { params });
       return response.data.data;
@@ -71,7 +71,7 @@ class ApiClient {
   /**
    * POST 请求
    */
-  async post<T = any>(url: string, data?: any): Promise<T> {
+  async post<T = unknown>(url: string, data?: unknown): Promise<T> {
     try {
       const response = await this.client.post<ApiResponse<T>>(url, data);
       return response.data.data;
@@ -83,7 +83,7 @@ class ApiClient {
   /**
    * PATCH 请求
    */
-  async patch<T = any>(url: string, data?: any): Promise<T> {
+  async patch<T = unknown>(url: string, data?: unknown): Promise<T> {
     try {
       const response = await this.client.patch<ApiResponse<T>>(url, data);
       return response.data.data;
@@ -95,7 +95,7 @@ class ApiClient {
   /**
    * DELETE 请求
    */
-  async delete<T = any>(url: string): Promise<T> {
+  async delete<T = unknown>(url: string): Promise<T> {
     try {
       const response = await this.client.delete<ApiResponse<T>>(url);
       return response.data.data;
@@ -130,7 +130,7 @@ class ApiClient {
   /**
    * 错误处理
    */
-  private handleError(error: any): Error {
+  private handleError(error: unknown): Error {
     if (axios.isAxiosError(error) && error.response?.data) {
       const apiError = error.response.data as ApiError;
       return new Error(apiError.message);
