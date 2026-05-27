@@ -1,18 +1,30 @@
-import { Controller, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@/auth/guards/jwt-auth.guard';
+import { CurrentUser, RequestUser } from '@/common/decorators/current-user.decorator';
 import { MealsService } from './meals.service';
-
-// GET  /meals/planned/today  — Loop B W6
-// POST /meals/quick-log
-// GET  /meals/today
-// POST /meals
-// GET  /meals/:id
-// PATCH /meals/:id
-// DELETE /meals/:id
-// POST /meals/items
-// PATCH /meals/items/:id
-// DELETE /meals/items/:id
+import {
+  AddMealItemDto,
+  CreateMealLogDto,
+  CreateMealPlanTemplateDto,
+  ListMealsDto,
+  QuickLogDto,
+  UpdateMealItemDto,
+  UpdateMealLogDto,
+  UpdateMealPlanTemplateDto,
+} from './dto/meals.dto';
 
 @ApiTags('Meals')
 @ApiBearerAuth('JWT')
@@ -20,4 +32,124 @@ import { MealsService } from './meals.service';
 @Controller('meals')
 export class MealsController {
   constructor(private readonly mealsService: MealsService) {}
+
+  // ── Meal logs ──────────────────────────────────────────────────────────────
+
+  @Get()
+  @ApiOperation({ summary: '获取餐次列表（?date=YYYY-MM-DD 筛日期）' })
+  listMeals(@Query() dto: ListMealsDto, @CurrentUser() user: RequestUser) {
+    return this.mealsService.listMeals(user.userId, dto);
+  }
+
+  @Get('today')
+  @ApiOperation({ summary: '今日饮食 + 宏量目标 + 已达成' })
+  getToday(@CurrentUser() user: RequestUser) {
+    return this.mealsService.getToday(user.userId);
+  }
+
+  @Get('planned/today')
+  @ApiOperation({ summary: '今日计划餐（来自激活模板）' })
+  getPlannedToday(@CurrentUser() user: RequestUser) {
+    return this.mealsService.getPlannedToday(user.userId);
+  }
+
+  @Get('plan-templates')
+  @ApiOperation({ summary: '我的餐单模板列表' })
+  listPlanTemplates(@CurrentUser() user: RequestUser) {
+    return this.mealsService.listPlanTemplates(user.userId);
+  }
+
+  @Post('plan-templates')
+  @ApiOperation({ summary: '新建餐单模板（嵌套 scheduled_meals）' })
+  createPlanTemplate(@Body() dto: CreateMealPlanTemplateDto, @CurrentUser() user: RequestUser) {
+    return this.mealsService.createPlanTemplate(user.userId, dto);
+  }
+
+  @Patch('plan-templates/:id')
+  @ApiOperation({ summary: '更新餐单模板' })
+  @ApiParam({ name: 'id' })
+  updatePlanTemplate(
+    @Param('id') id: string,
+    @Body() dto: UpdateMealPlanTemplateDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.mealsService.updatePlanTemplate(id, user.userId, dto);
+  }
+
+  @Post('plan-templates/:id/activate')
+  @ApiOperation({ summary: '激活餐单模板（同时取消其他激活）' })
+  @ApiParam({ name: 'id' })
+  activatePlanTemplate(@Param('id') id: string, @CurrentUser() user: RequestUser) {
+    return this.mealsService.activatePlanTemplate(id, user.userId);
+  }
+
+  @Post('quick-log')
+  @ApiOperation({ summary: 'Loop B 一键打卡（按计划餐 1-click 确认）' })
+  quickLog(@Body() dto: QuickLogDto, @CurrentUser() user: RequestUser) {
+    return this.mealsService.quickLog(user.userId, dto);
+  }
+
+  @Post()
+  @ApiOperation({ summary: '自由餐打卡（带 items）' })
+  createMealLog(@Body() dto: CreateMealLogDto, @CurrentUser() user: RequestUser) {
+    return this.mealsService.createMealLog(user.userId, dto);
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: '餐次详情' })
+  @ApiParam({ name: 'id' })
+  findOne(@Param('id') id: string, @CurrentUser() user: RequestUser) {
+    return this.mealsService.findOne(id, user.userId);
+  }
+
+  @Patch(':id')
+  @ApiOperation({ summary: '更新餐次' })
+  @ApiParam({ name: 'id' })
+  updateMealLog(
+    @Param('id') id: string,
+    @Body() dto: UpdateMealLogDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.mealsService.updateMealLog(id, user.userId, dto);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: '软删餐次' })
+  @ApiParam({ name: 'id' })
+  @HttpCode(HttpStatus.OK)
+  deleteMealLog(@Param('id') id: string, @CurrentUser() user: RequestUser) {
+    return this.mealsService.deleteMealLog(id, user.userId);
+  }
+
+  @Post(':id/items')
+  @ApiOperation({ summary: '向餐次添加食材项' })
+  @ApiParam({ name: 'id' })
+  addItem(
+    @Param('id') id: string,
+    @Body() dto: AddMealItemDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.mealsService.addItem(id, user.userId, dto);
+  }
+
+  // ── Meal items ─────────────────────────────────────────────────────────────
+
+  @Patch('items/:itemId')
+  @ApiOperation({ summary: '改食材项克数（自动重算 snapshot）' })
+  @ApiParam({ name: 'itemId' })
+  updateItem(
+    @Param('itemId') itemId: string,
+    @Body() dto: UpdateMealItemDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.mealsService.updateItem(itemId, user.userId, dto);
+  }
+
+  @Delete('items/:itemId')
+  @ApiOperation({ summary: '删除食材项' })
+  @ApiParam({ name: 'itemId' })
+  @HttpCode(HttpStatus.OK)
+  deleteItem(@Param('itemId') itemId: string, @CurrentUser() user: RequestUser) {
+    return this.mealsService.deleteItem(itemId, user.userId);
+  }
 }

@@ -447,10 +447,23 @@ model Food {
   recipe_ingredients         RecipeIngredient[]
   meal_items                 MealItem[]
   scheduled_meal_ingredients ScheduledMealIngredient[]
+  favorites                  FoodFavorite[]
 
   @@index([name_zh])
   @@index([barcode])
   @@map("foods")
+}
+
+model FoodFavorite {
+  user_id    String
+  food_id    String
+  created_at DateTime @default(now())
+
+  food Food @relation(fields: [food_id], references: [id], onDelete: Cascade)
+
+  @@id([user_id, food_id])
+  @@index([user_id])
+  @@map("food_favorites")
 }
 
 enum FoodCategory {
