@@ -1,17 +1,27 @@
-import { Controller, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@/auth/guards/jwt-auth.guard';
+import { CurrentUser, RequestUser } from '@/common/decorators/current-user.decorator';
 import { ExpensesService } from './expenses.service';
-
-// POST /expenses
-// GET  /expenses
-// GET  /expenses/:id
-// PATCH /expenses/:id
-// DELETE /expenses/:id
-// GET  /expenses/summary/monthly
-// POST /budgets
-// GET  /budgets/:year/:month
-// POST /budgets/recurring
+import {
+  CreateExpenseDto,
+  CreateRecurringExpenseDto,
+  ListExpensesDto,
+  SetBudgetDto,
+  UpdateExpenseDto,
+} from './dto/expenses.dto';
 
 @ApiTags('Expenses')
 @ApiBearerAuth('JWT')
@@ -19,4 +29,74 @@ import { ExpensesService } from './expenses.service';
 @Controller('expenses')
 export class ExpensesController {
   constructor(private readonly expensesService: ExpensesService) {}
+
+  @Get()
+  @ApiOperation({ summary: '支出列表（?date_from=&date_to=&category=）' })
+  list(@Query() dto: ListExpensesDto, @CurrentUser() user: RequestUser) {
+    return this.expensesService.list(user.userId, dto);
+  }
+
+  @Post()
+  @ApiOperation({ summary: '新增支出' })
+  create(@Body() dto: CreateExpenseDto, @CurrentUser() user: RequestUser) {
+    return this.expensesService.create(user.userId, dto);
+  }
+
+  @Get('summary/monthly')
+  @ApiOperation({ summary: '月支出汇总（?year=&month=）' })
+  getMonthlySummary(
+    @Query('year') year: number,
+    @Query('month') month: number,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.expensesService.getMonthlySummary(user.userId, year, month);
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: '支出详情' })
+  @ApiParam({ name: 'id' })
+  findOne(@Param('id') id: string, @CurrentUser() user: RequestUser) {
+    return this.expensesService.findOne(id, user.userId);
+  }
+
+  @Patch(':id')
+  @ApiOperation({ summary: '更新支出' })
+  @ApiParam({ name: 'id' })
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateExpenseDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.expensesService.update(id, user.userId, dto);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: '软删支出' })
+  @ApiParam({ name: 'id' })
+  @HttpCode(HttpStatus.OK)
+  remove(@Param('id') id: string, @CurrentUser() user: RequestUser) {
+    return this.expensesService.remove(id, user.userId);
+  }
+
+  @Post('recurring')
+  @ApiOperation({ summary: '新建循环账单' })
+  createRecurring(@Body() dto: CreateRecurringExpenseDto, @CurrentUser() user: RequestUser) {
+    return this.expensesService.createRecurring(user.userId, dto);
+  }
+
+  @Post('budgets')
+  @ApiOperation({ summary: '设置月度预算' })
+  setBudget(@Body() dto: SetBudgetDto, @CurrentUser() user: RequestUser) {
+    return this.expensesService.setBudget(user.userId, dto);
+  }
+
+  @Get('budgets/:year/:month')
+  @ApiOperation({ summary: '获取指定月预算' })
+  getBudget(
+    @Param('year') year: number,
+    @Param('month') month: number,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.expensesService.getBudget(user.userId, year, month);
+  }
 }

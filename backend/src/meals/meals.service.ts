@@ -5,7 +5,11 @@ import {
   AddMealItemDto,
   CreateMealLogDto,
   CreateMealPlanTemplateDto,
+  GetElectrolyteLogsDto,
+  GetWaterLogsDto,
   ListMealsDto,
+  LogElectrolyteDto,
+  LogWaterDto,
   QuickLogDto,
   UpdateMealItemDto,
   UpdateMealLogDto,
@@ -435,6 +439,81 @@ export class MealsService {
     }
 
     return { macro: { kcal: 0, protein: 0, carbs: 0, fat: 0 } };
+  }
+
+  // ── Water ──────────────────────────────────────────────────────────────────
+
+  async logWater(userId: string, dto: LogWaterDto) {
+    const existing = await this.prisma.waterLog.findUnique({
+      where: { client_op_id: dto.client_op_id },
+    });
+    if (existing) return existing;
+
+    const logDate = new Date(dto.consumed_at);
+    logDate.setHours(0, 0, 0, 0);
+
+    return this.prisma.waterLog.create({
+      data: {
+        user_id: userId,
+        ml: dto.ml,
+        consumed_at: new Date(dto.consumed_at),
+        log_date: logDate,
+        client_op_id: dto.client_op_id,
+        client_ts: new Date(dto.client_ts),
+      },
+    });
+  }
+
+  async getWaterLogs(userId: string, dto: GetWaterLogsDto) {
+    const where: Record<string, unknown> = { user_id: userId, deleted_at: null };
+    if (dto.date) {
+      const d = new Date(dto.date);
+      d.setHours(0, 0, 0, 0);
+      where.log_date = d;
+    }
+    return this.prisma.waterLog.findMany({
+      where,
+      orderBy: { consumed_at: 'asc' },
+    });
+  }
+
+  // ── Electrolytes ───────────────────────────────────────────────────────────
+
+  async logElectrolyte(userId: string, dto: LogElectrolyteDto) {
+    const existing = await this.prisma.electrolyteLog.findUnique({
+      where: { client_op_id: dto.client_op_id },
+    });
+    if (existing) return existing;
+
+    const logDate = new Date(dto.consumed_at);
+    logDate.setHours(0, 0, 0, 0);
+
+    return this.prisma.electrolyteLog.create({
+      data: {
+        user_id: userId,
+        sodium_mg: dto.sodium_mg,
+        potassium_mg: dto.potassium_mg,
+        magnesium_mg: dto.magnesium_mg,
+        source: dto.source,
+        consumed_at: new Date(dto.consumed_at),
+        log_date: logDate,
+        client_op_id: dto.client_op_id,
+        client_ts: new Date(dto.client_ts),
+      },
+    });
+  }
+
+  async getElectrolyteLogs(userId: string, dto: GetElectrolyteLogsDto) {
+    const where: Record<string, unknown> = { user_id: userId, deleted_at: null };
+    if (dto.date) {
+      const d = new Date(dto.date);
+      d.setHours(0, 0, 0, 0);
+      where.log_date = d;
+    }
+    return this.prisma.electrolyteLog.findMany({
+      where,
+      orderBy: { consumed_at: 'asc' },
+    });
   }
 
   private async recalcMealTotals(mealLogId: string) {

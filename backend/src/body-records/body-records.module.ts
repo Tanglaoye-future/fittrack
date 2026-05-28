@@ -1,11 +1,11 @@
 import { Module } from '@nestjs/common';
 import { DatabaseModule } from '@/database/database.module';
-import { BodyRecordsController } from './body-records.controller';
+import { BodyRecordsController, PhotosController } from './body-records.controller';
 import { BodyRecordsService } from './body-records.service';
 
 @Module({
   imports: [DatabaseModule],
-  controllers: [BodyRecordsController],
+  controllers: [BodyRecordsController, PhotosController],
   providers: [BodyRecordsService],
   exports: [BodyRecordsService],
 })

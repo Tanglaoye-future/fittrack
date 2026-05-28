@@ -1,11 +1,11 @@
 import { Module } from '@nestjs/common';
 import { DatabaseModule } from '@/database/database.module';
-import { CompetitionsController } from './competitions.controller';
+import { CompetitionsController, PrepCyclesController } from './competitions.controller';
 import { CompetitionsService } from './competitions.service';
 
 @Module({
   imports: [DatabaseModule],
-  controllers: [CompetitionsController],
+  controllers: [CompetitionsController, PrepCyclesController],
   providers: [CompetitionsService],
   exports: [CompetitionsService],
 })

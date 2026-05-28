@@ -292,3 +292,76 @@ export class UpdateMealPlanTemplateDto {
   @IsInt()
   total_fat_g?: number;
 }
+
+// ── Water / Electrolytes ───────────────────────────────────────────────────
+
+export class LogWaterDto {
+  @ApiProperty()
+  @IsInt()
+  @Min(1)
+  ml: number;
+
+  @ApiProperty()
+  @IsString()
+  consumed_at: string;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  client_op_id: string;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  client_ts: string;
+}
+
+export class GetWaterLogsDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  date?: string;
+}
+
+export class LogElectrolyteDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  sodium_mg?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  potassium_mg?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  magnesium_mg?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  source?: string;
+
+  @ApiProperty()
+  @IsString()
+  consumed_at: string;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  client_op_id: string;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  client_ts: string;
+}
+
+export class GetElectrolyteLogsDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  date?: string;
+}
