@@ -50,8 +50,10 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
-    const user = await this.prisma.user.findUnique({
-      where: { email: dto.email },
+    const identifier = dto.email.trim();
+    const isEmail = identifier.includes('@');
+    const user = await this.prisma.user.findFirst({
+      where: isEmail ? { email: identifier } : { username: identifier },
     });
     if (!user) throw new UnauthorizedException('邮箱或密码错误');
 

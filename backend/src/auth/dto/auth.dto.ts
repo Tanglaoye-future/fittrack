@@ -23,8 +23,9 @@ export class RegisterDto {
 }
 
 export class LoginDto {
-  @ApiProperty({ example: 'user@example.com' })
-  @IsEmail()
+  @ApiProperty({ example: 'user@example.com 或 username' })
+  @IsString()
+  @IsNotEmpty()
   email: string;
 
   @ApiProperty({ example: 'password123' })
