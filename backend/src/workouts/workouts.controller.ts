@@ -204,4 +204,37 @@ export class WorkoutsController {
   getRecentPrs(@CurrentUser() user: RequestUser) {
     return this.workoutsService.getRecentPrs(user.userId);
   }
+
+  // ── V1 compat: flat workout CRUD (must come after specific routes) ─────────
+
+  @Get()
+  @ApiOperation({ summary: '[V1] 训练列表（分页，平铺格式）' })
+  listWorkouts(@Query() query: Record<string, string>, @CurrentUser() user: RequestUser) {
+    return this.workoutsService.listWorkoutsV1(user.userId, query);
+  }
+
+  @Post()
+  @ApiOperation({ summary: '[V1] 新建训练（平铺格式）' })
+  createWorkout(@Body() dto: Record<string, unknown>, @CurrentUser() user: RequestUser) {
+    return this.workoutsService.createWorkoutV1(user.userId, dto);
+  }
+
+  @Patch(':id')
+  @ApiOperation({ summary: '[V1] 更新训练（平铺格式）' })
+  @ApiParam({ name: 'id' })
+  updateWorkout(
+    @Param('id') id: string,
+    @Body() dto: Record<string, unknown>,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.workoutsService.updateWorkoutV1(id, user.userId, dto);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: '[V1] 删除训练' })
+  @ApiParam({ name: 'id' })
+  @HttpCode(HttpStatus.OK)
+  deleteWorkout(@Param('id') id: string, @CurrentUser() user: RequestUser) {
+    return this.workoutsService.deleteWorkoutV1(id, user.userId);
+  }
 }

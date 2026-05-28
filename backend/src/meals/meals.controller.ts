@@ -36,9 +36,9 @@ export class MealsController {
   // ── Meal logs ──────────────────────────────────────────────────────────────
 
   @Get()
-  @ApiOperation({ summary: '获取餐次列表（?date=YYYY-MM-DD 筛日期）' })
-  listMeals(@Query() dto: ListMealsDto, @CurrentUser() user: RequestUser) {
-    return this.mealsService.listMeals(user.userId, dto);
+  @ApiOperation({ summary: '[V1] 餐次列表（分页，平铺格式）' })
+  listMeals(@Query() query: Record<string, string>, @CurrentUser() user: RequestUser) {
+    return this.mealsService.listMealsV1(user.userId, query);
   }
 
   @Get('today')
@@ -90,9 +90,9 @@ export class MealsController {
   }
 
   @Post()
-  @ApiOperation({ summary: '自由餐打卡（带 items）' })
-  createMealLog(@Body() dto: CreateMealLogDto, @CurrentUser() user: RequestUser) {
-    return this.mealsService.createMealLog(user.userId, dto);
+  @ApiOperation({ summary: '[V1] 新建餐次（平铺格式）' })
+  createMealLog(@Body() dto: Record<string, unknown>, @CurrentUser() user: RequestUser) {
+    return this.mealsService.createMealV1(user.userId, dto);
   }
 
   @Get(':id')
@@ -103,22 +103,22 @@ export class MealsController {
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: '更新餐次' })
+  @ApiOperation({ summary: '[V1] 更新餐次（平铺格式）' })
   @ApiParam({ name: 'id' })
   updateMealLog(
     @Param('id') id: string,
-    @Body() dto: UpdateMealLogDto,
+    @Body() dto: Record<string, unknown>,
     @CurrentUser() user: RequestUser,
   ) {
-    return this.mealsService.updateMealLog(id, user.userId, dto);
+    return this.mealsService.updateMealV1(id, user.userId, dto);
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: '软删餐次' })
+  @ApiOperation({ summary: '[V1] 软删餐次' })
   @ApiParam({ name: 'id' })
   @HttpCode(HttpStatus.OK)
   deleteMealLog(@Param('id') id: string, @CurrentUser() user: RequestUser) {
-    return this.mealsService.deleteMealLog(id, user.userId);
+    return this.mealsService.deleteMealV1(id, user.userId);
   }
 
   @Post(':id/items')

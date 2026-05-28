@@ -31,9 +31,9 @@ export class BodyRecordsController {
   constructor(private readonly bodyRecordsService: BodyRecordsService) {}
 
   @Get()
-  @ApiOperation({ summary: '体测记录列表（?date_from=&date_to=）' })
-  list(@Query() dto: ListBodyRecordsDto, @CurrentUser() user: RequestUser) {
-    return this.bodyRecordsService.list(user.userId, dto);
+  @ApiOperation({ summary: '体测记录列表（分页，?start_date=&end_date=）' })
+  list(@Query() dto: Record<string, string>, @CurrentUser() user: RequestUser) {
+    return this.bodyRecordsService.list(user.userId, dto as never);
   }
 
   @Get('today')
@@ -49,8 +49,8 @@ export class BodyRecordsController {
   }
 
   @Post()
-  @ApiOperation({ summary: '新增 / Upsert 体测（按日期幂等）' })
-  create(@Body() dto: CreateBodyRecordDto, @CurrentUser() user: RequestUser) {
+  @ApiOperation({ summary: '新增 / Upsert 体测（支持 v1 字段名，按日期幂等）' })
+  create(@Body() dto: Record<string, unknown>, @CurrentUser() user: RequestUser) {
     return this.bodyRecordsService.create(user.userId, dto);
   }
 

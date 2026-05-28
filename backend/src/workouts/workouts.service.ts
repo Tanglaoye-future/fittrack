@@ -526,6 +526,77 @@ export class WorkoutsService {
     });
   }
 
+  // ── V1 Compat: flat workout CRUD ──────────────────────────────────────────
+
+  async listWorkoutsV1(
+    userId: string,
+    query: { page?: number; limit?: number; date?: string; workout_type?: string },
+  ) {
+    const page = Number(query.page) || 1;
+    const limit = Number(query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const where: Record<string, unknown> = { user_id: userId, deleted_at: null };
+    if (query.date) where.workout_date = new Date(query.date);
+    if (query.workout_type) where.workout_type = query.workout_type;
+
+    const [data, total] = await Promise.all([
+      this.prisma.workoutV1.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { workout_date: 'desc' },
+      }),
+      this.prisma.workoutV1.count({ where }),
+    ]);
+
+    return { data, total, page, limit };
+  }
+
+  async createWorkoutV1(userId: string, dto: Record<string, unknown>) {
+    return this.prisma.workoutV1.create({
+      data: {
+        user_id: userId,
+        workout_type: (dto.workout_type as string) ?? 'STRENGTH',
+        exercise_name: dto.exercise_name as string,
+        duration_minutes: dto.duration_minutes as number | undefined,
+        calories_burned: dto.calories_burned as number | undefined,
+        intensity: dto.intensity as string | undefined,
+        sets: dto.sets as number | undefined,
+        reps: dto.reps as number | undefined,
+        weight: dto.weight as number | undefined,
+        notes: dto.notes as string | undefined,
+        workout_date: new Date((dto.workout_date as string) ?? new Date().toISOString().split('T')[0]),
+        workout_time: dto.workout_time as string | undefined,
+      },
+    });
+  }
+
+  async updateWorkoutV1(id: string, userId: string, dto: Record<string, unknown>) {
+    const existing = await this.prisma.workoutV1.findFirst({
+      where: { id, user_id: userId, deleted_at: null },
+    });
+    if (!existing) throw new NotFoundException('训练记录不存在');
+
+    const { workout_date, ...rest } = dto;
+    return this.prisma.workoutV1.update({
+      where: { id },
+      data: {
+        ...(rest as object),
+        ...(workout_date ? { workout_date: new Date(workout_date as string) } : {}),
+      },
+    });
+  }
+
+  async deleteWorkoutV1(id: string, userId: string) {
+    const existing = await this.prisma.workoutV1.findFirst({
+      where: { id, user_id: userId, deleted_at: null },
+    });
+    if (!existing) throw new NotFoundException('训练记录不存在');
+    await this.prisma.workoutV1.update({ where: { id }, data: { deleted_at: new Date() } });
+    return { deleted: true };
+  }
+
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   private async assertSessionOwner(sessionId: string, userId: string) {

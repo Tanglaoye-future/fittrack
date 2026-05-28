@@ -1575,3 +1575,47 @@ enum ControlledViewScope {
   SUMMARY
   FULL
 }
+
+// ============= §V1 兼容层（前端 v1 格式适配）=============
+
+model WorkoutV1 {
+  id               String    @id @default(uuid())
+  user_id          String
+  workout_type     String    @default("STRENGTH")
+  exercise_name    String
+  duration_minutes Int?
+  calories_burned  Decimal?  @db.Decimal(8, 2)
+  intensity        String?
+  sets             Int?
+  reps             Int?
+  weight           Decimal?  @db.Decimal(6, 2)
+  notes            String?
+  workout_date     DateTime  @db.Date
+  workout_time     String?
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+  deleted_at       DateTime?
+
+  @@index([user_id, workout_date])
+  @@map("workouts_v1")
+}
+
+model MealV1 {
+  id           String    @id @default(uuid())
+  user_id      String
+  meal_type    String    @default("BREAKFAST")
+  food_name    String
+  calories     Decimal?  @db.Decimal(8, 2)
+  protein      Decimal?  @db.Decimal(6, 2)
+  carbs        Decimal?  @db.Decimal(6, 2)
+  fat          Decimal?  @db.Decimal(6, 2)
+  portion_size String?
+  meal_date    DateTime  @db.Date
+  meal_time    String?
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
+  deleted_at   DateTime?
+
+  @@index([user_id, meal_date])
+  @@map("meals_v1")
+}

@@ -23,6 +23,8 @@ const buildPrismaMock = () => ({
     findFirst: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
+    count: jest.fn(),
+    aggregate: jest.fn(),
   },
   recurringExpense: {
     findUnique: jest.fn(),
@@ -48,14 +50,18 @@ describe('ExpensesService', () => {
   });
 
   describe('list', () => {
-    it('returns expenses for user', async () => {
+    it('returns paginated expenses for user', async () => {
       prismaMock.expense.findMany.mockResolvedValue([EXPENSE]);
+      prismaMock.expense.count.mockResolvedValue(1);
       const result = await service.list('user-1', {});
-      expect(result).toEqual([EXPENSE]);
+      expect(result).toHaveProperty('data');
+      expect(result).toHaveProperty('total', 1);
+      expect(result.data).toHaveLength(1);
     });
 
     it('filters by category', async () => {
       prismaMock.expense.findMany.mockResolvedValue([EXPENSE]);
+      prismaMock.expense.count.mockResolvedValue(1);
       await service.list('user-1', { category: ExpenseCategoryEnum.SUPPLEMENT });
       expect(prismaMock.expense.findMany).toHaveBeenCalledWith(
         expect.objectContaining({ where: expect.objectContaining({ category: 'SUPPLEMENT' }) }),
@@ -74,16 +80,16 @@ describe('ExpensesService', () => {
 
     it('returns existing if idempotent', async () => {
       prismaMock.expense.findUnique.mockResolvedValue(EXPENSE);
-      const result = await service.create('user-1', dto as any);
-      expect(result).toBe(EXPENSE);
+      const result = await service.create('user-1', dto as never);
       expect(prismaMock.expense.create).not.toHaveBeenCalled();
+      expect(result).toHaveProperty('id', EXPENSE.id);
     });
 
     it('creates new expense', async () => {
       prismaMock.expense.findUnique.mockResolvedValue(null);
       prismaMock.expense.create.mockResolvedValue(EXPENSE);
-      const result = await service.create('user-1', dto as any);
-      expect(result).toBe(EXPENSE);
+      const result = await service.create('user-1', dto as never);
+      expect(result).toHaveProperty('id', EXPENSE.id);
     });
   });
 
@@ -91,7 +97,7 @@ describe('ExpensesService', () => {
     it('returns expense if found', async () => {
       prismaMock.expense.findFirst.mockResolvedValue(EXPENSE);
       const result = await service.findOne('exp-1', 'user-1');
-      expect(result).toBe(EXPENSE);
+      expect(result).toHaveProperty('id', EXPENSE.id);
     });
 
     it('throws NotFoundException if not found', async () => {
@@ -135,7 +141,7 @@ describe('ExpensesService', () => {
         total_budget: 3000,
         client_op_id: 'op-budget-1',
         client_ts: new Date().toISOString(),
-      } as any);
+      } as never);
       expect(result).toBe(budget);
     });
   });

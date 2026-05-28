@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@/database/prisma.service';
 import {
@@ -8,24 +9,57 @@ import {
   TrendQueryDto,
 } from './dto/body-records.dto';
 
+function mapToV1(r: Record<string, unknown>) {
+  return {
+    id: r.id,
+    user_id: r.user_id,
+    weight: r.morning_weight_kg,
+    body_fat_percentage: r.body_fat_percentage,
+    muscle_mass: r.muscle_mass_kg,
+    chest: r.chest_cm,
+    waist: r.waist_cm,
+    hip: r.hip_cm,
+    arm: r.arm_left_cm,
+    thigh: r.thigh_left_cm,
+    measurement_date: r.measurement_date,
+    created_at: r.created_at,
+    updated_at: r.updated_at,
+  };
+}
+
 @Injectable()
 export class BodyRecordsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async list(userId: string, dto: ListBodyRecordsDto) {
+  async list(
+    userId: string,
+    dto: ListBodyRecordsDto & { page?: number; limit?: number; start_date?: string; end_date?: string },
+  ) {
+    const page = Number(dto.page) || 1;
+    const limit = Number(dto.limit) || 10;
+    const skip = (page - 1) * limit;
+
     const where: Record<string, unknown> = { user_id: userId, deleted_at: null };
-    if (dto.date_from || dto.date_to) {
+    const dateFrom = dto.date_from ?? dto.start_date;
+    const dateTo = dto.date_to ?? dto.end_date;
+    if (dateFrom || dateTo) {
       const range: Record<string, Date> = {};
-      if (dto.date_from) range.gte = new Date(dto.date_from);
-      if (dto.date_to) range.lte = new Date(dto.date_to);
+      if (dateFrom) range.gte = new Date(dateFrom);
+      if (dateTo) range.lte = new Date(dateTo);
       where.measurement_date = range;
     }
 
-    return this.prisma.bodyRecord.findMany({
-      where,
-      include: { photos: { where: { deleted_at: null } } },
-      orderBy: { measurement_date: 'desc' },
-    });
+    const [items, total] = await Promise.all([
+      this.prisma.bodyRecord.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { measurement_date: 'desc' },
+      }),
+      this.prisma.bodyRecord.count({ where }),
+    ]);
+
+    return { data: items.map((r) => mapToV1(r as unknown as Record<string, unknown>)), total, page, limit };
   }
 
   async getToday(userId: string) {
@@ -38,59 +72,45 @@ export class BodyRecordsService {
     });
   }
 
-  async create(userId: string, dto: CreateBodyRecordDto) {
-    const measurementDate = new Date(dto.measurement_date);
+  async create(userId: string, dto: Partial<CreateBodyRecordDto> & Record<string, unknown>) {
+    const measurementDate = new Date((dto.measurement_date as string) ?? new Date().toISOString().split('T')[0]);
+    const clientOpId = (dto.client_op_id as string) || randomUUID();
+    const clientTs = new Date((dto.client_ts as string) || new Date().toISOString());
 
-    return this.prisma.bodyRecord.upsert({
+    // Support v1 field name aliases
+    const morning_weight_kg = (dto.morning_weight_kg ?? dto.weight) as number | undefined;
+    const muscle_mass_kg = (dto.muscle_mass_kg ?? dto.muscle_mass) as number | undefined;
+    const chest_cm = (dto.chest_cm ?? dto.chest) as number | undefined;
+    const waist_cm = (dto.waist_cm ?? dto.waist) as number | undefined;
+    const hip_cm = (dto.hip_cm ?? dto.hip) as number | undefined;
+    const arm_left_cm = (dto.arm_left_cm ?? dto.arm) as number | undefined;
+    const thigh_left_cm = (dto.thigh_left_cm ?? dto.thigh) as number | undefined;
+
+    const sharedData = {
+      morning_weight_kg,
+      body_fat_percentage: dto.body_fat_percentage as number | undefined,
+      muscle_mass_kg,
+      chest_cm,
+      waist_cm,
+      hip_cm,
+      arm_left_cm,
+      thigh_left_cm,
+      notes: dto.notes as string | undefined,
+    };
+
+    const record = await this.prisma.bodyRecord.upsert({
       where: { user_id_measurement_date: { user_id: userId, measurement_date: measurementDate } },
       create: {
         user_id: userId,
         measurement_date: measurementDate,
-        morning_weight_kg: dto.morning_weight_kg,
-        evening_weight_kg: dto.evening_weight_kg,
-        body_fat_percentage: dto.body_fat_percentage,
-        muscle_mass_kg: dto.muscle_mass_kg,
-        visceral_fat_index: dto.visceral_fat_index,
-        chest_cm: dto.chest_cm,
-        waist_cm: dto.waist_cm,
-        hip_cm: dto.hip_cm,
-        arm_left_cm: dto.arm_left_cm,
-        arm_right_cm: dto.arm_right_cm,
-        thigh_left_cm: dto.thigh_left_cm,
-        thigh_right_cm: dto.thigh_right_cm,
-        calf_left_cm: dto.calf_left_cm,
-        calf_right_cm: dto.calf_right_cm,
-        subjective_condition: dto.subjective_condition,
-        water_retention_score: dto.water_retention_score,
-        sleep_hours: dto.sleep_hours,
-        energy_score: dto.energy_score,
-        notes: dto.notes,
-        client_op_id: dto.client_op_id,
-        client_ts: new Date(dto.client_ts),
+        ...sharedData,
+        client_op_id: clientOpId,
+        client_ts: clientTs,
       },
-      update: {
-        morning_weight_kg: dto.morning_weight_kg,
-        evening_weight_kg: dto.evening_weight_kg,
-        body_fat_percentage: dto.body_fat_percentage,
-        muscle_mass_kg: dto.muscle_mass_kg,
-        visceral_fat_index: dto.visceral_fat_index,
-        chest_cm: dto.chest_cm,
-        waist_cm: dto.waist_cm,
-        hip_cm: dto.hip_cm,
-        arm_left_cm: dto.arm_left_cm,
-        arm_right_cm: dto.arm_right_cm,
-        thigh_left_cm: dto.thigh_left_cm,
-        thigh_right_cm: dto.thigh_right_cm,
-        calf_left_cm: dto.calf_left_cm,
-        calf_right_cm: dto.calf_right_cm,
-        subjective_condition: dto.subjective_condition,
-        water_retention_score: dto.water_retention_score,
-        sleep_hours: dto.sleep_hours,
-        energy_score: dto.energy_score,
-        notes: dto.notes,
-      },
-      include: { photos: { where: { deleted_at: null } } },
+      update: sharedData,
     });
+
+    return mapToV1(record as unknown as Record<string, unknown>);
   }
 
   async findOne(id: string, userId: string) {

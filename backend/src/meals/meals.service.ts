@@ -516,6 +516,70 @@ export class MealsService {
     });
   }
 
+  // ── V1 Compat: flat meal CRUD ──────────────────────────────────────────────
+
+  async listMealsV1(
+    userId: string,
+    query: { page?: number; limit?: number; date?: string; meal_type?: string },
+  ) {
+    const page = Number(query.page) || 1;
+    const limit = Number(query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const where: Record<string, unknown> = { user_id: userId, deleted_at: null };
+    if (query.date) where.meal_date = new Date(query.date);
+    if (query.meal_type) where.meal_type = query.meal_type;
+
+    const [data, total] = await Promise.all([
+      this.prisma.mealV1.findMany({ where, skip, take: limit, orderBy: { meal_date: 'desc' } }),
+      this.prisma.mealV1.count({ where }),
+    ]);
+
+    return { data, total, page, limit };
+  }
+
+  async createMealV1(userId: string, dto: Record<string, unknown>) {
+    return this.prisma.mealV1.create({
+      data: {
+        user_id: userId,
+        meal_type: (dto.meal_type as string) ?? 'BREAKFAST',
+        food_name: dto.food_name as string,
+        calories: dto.calories as number | undefined,
+        protein: dto.protein as number | undefined,
+        carbs: dto.carbs as number | undefined,
+        fat: dto.fat as number | undefined,
+        portion_size: dto.portion_size as string | undefined,
+        meal_date: new Date((dto.meal_date as string) ?? new Date().toISOString().split('T')[0]),
+        meal_time: dto.meal_time as string | undefined,
+      },
+    });
+  }
+
+  async updateMealV1(id: string, userId: string, dto: Record<string, unknown>) {
+    const existing = await this.prisma.mealV1.findFirst({
+      where: { id, user_id: userId, deleted_at: null },
+    });
+    if (!existing) throw new NotFoundException('饮食记录不存在');
+
+    const { meal_date, ...rest } = dto;
+    return this.prisma.mealV1.update({
+      where: { id },
+      data: {
+        ...(rest as object),
+        ...(meal_date ? { meal_date: new Date(meal_date as string) } : {}),
+      },
+    });
+  }
+
+  async deleteMealV1(id: string, userId: string) {
+    const existing = await this.prisma.mealV1.findFirst({
+      where: { id, user_id: userId, deleted_at: null },
+    });
+    if (!existing) throw new NotFoundException('饮食记录不存在');
+    await this.prisma.mealV1.update({ where: { id }, data: { deleted_at: new Date() } });
+    return { deleted: true };
+  }
+
   private async recalcMealTotals(mealLogId: string) {
     const items = await this.prisma.mealItem.findMany({
       where: { meal_log_id: mealLogId, deleted_at: null },

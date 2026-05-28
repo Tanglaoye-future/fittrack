@@ -26,6 +26,7 @@ const buildPrismaMock = () => ({
     findFirst: jest.fn(),
     upsert: jest.fn(),
     update: jest.fn(),
+    count: jest.fn(),
   },
   progressPhoto: {
     findUnique: jest.fn(),
@@ -48,14 +49,18 @@ describe('BodyRecordsService', () => {
   });
 
   describe('list', () => {
-    it('returns all records without date filter', async () => {
+    it('returns paginated records without date filter', async () => {
       prismaMock.bodyRecord.findMany.mockResolvedValue([RECORD]);
+      prismaMock.bodyRecord.count.mockResolvedValue(1);
       const result = await service.list('user-1', {});
-      expect(result).toEqual([RECORD]);
+      expect(result).toHaveProperty('data');
+      expect(result).toHaveProperty('total', 1);
+      expect(result.data).toHaveLength(1);
     });
 
     it('applies date_from filter', async () => {
       prismaMock.bodyRecord.findMany.mockResolvedValue([]);
+      prismaMock.bodyRecord.count.mockResolvedValue(0);
       await service.list('user-1', { date_from: '2026-01-01' });
       expect(prismaMock.bodyRecord.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -75,9 +80,10 @@ describe('BodyRecordsService', () => {
 
     it('upserts record by measurement_date', async () => {
       prismaMock.bodyRecord.upsert.mockResolvedValue(RECORD);
-      const result = await service.create('user-1', dto as any);
-      expect(result).toBe(RECORD);
+      const result = await service.create('user-1', dto as never);
       expect(prismaMock.bodyRecord.upsert).toHaveBeenCalled();
+      expect(result).toHaveProperty('id', RECORD.id);
+      expect(result).toHaveProperty('weight', RECORD.morning_weight_kg);
     });
   });
 
@@ -133,7 +139,7 @@ describe('BodyRecordsService', () => {
 
     it('returns existing photo if idempotent', async () => {
       prismaMock.progressPhoto.findUnique.mockResolvedValue(PHOTO);
-      const result = await service.createPhoto('user-1', dto as any);
+      const result = await service.createPhoto('user-1', dto as never);
       expect(result).toBe(PHOTO);
       expect(prismaMock.progressPhoto.create).not.toHaveBeenCalled();
     });
@@ -141,7 +147,7 @@ describe('BodyRecordsService', () => {
     it('creates new photo', async () => {
       prismaMock.progressPhoto.findUnique.mockResolvedValue(null);
       prismaMock.progressPhoto.create.mockResolvedValue(PHOTO);
-      const result = await service.createPhoto('user-1', dto as any);
+      const result = await service.createPhoto('user-1', dto as never);
       expect(result).toBe(PHOTO);
     });
   });
