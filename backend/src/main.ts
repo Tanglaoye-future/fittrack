@@ -55,7 +55,6 @@ async function bootstrap() {
     .addTag('Coach', '教练协同')
     .addTag('CheckIns', '周 Check-in（Loop C）')
     .addTag('Expenses', '消费')
-    .addTag('Analytics', '分析')
     .addTag('Controlled', 'PED 私域（§14）')
     .addBearerAuth({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' }, 'JWT')
     .build();

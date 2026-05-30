@@ -30,8 +30,7 @@ import { ExpensesModule } from './expenses/expenses.module';
 import { CoachModule } from './coach/coach.module';
 import { CheckInsModule } from './check-ins/check-ins.module';
 
-// 分析域
-import { AnalyticsModule } from './analytics/analytics.module';
+// 分析域已迁移到 Python 服务（analytics/）。Nest 不再注册 AnalyticsModule。
 
 // 受控物质私域（§14，BUILD_FLAG_DISABLE_CONTROLLED 时移除）
 import { ControlledModule } from './controlled/controlled.module';
@@ -61,8 +60,7 @@ import { ControlledModule } from './controlled/controlled.module';
     // 教练域
     CoachModule,
     CheckInsModule,
-    // 分析域
-    AnalyticsModule,
+    // 分析域：迁移到 Python 服务（http://localhost:3010），不再走 Nest
     // PED 私域
     ControlledModule,
   ],

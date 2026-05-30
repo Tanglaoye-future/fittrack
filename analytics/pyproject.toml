@@ -1,0 +1,35 @@
+[project]
+name = "fitflow-analytics"
+version = "0.1.0"
+description = "FitFlow Pro v2 — Python analytics service (FastAPI). Reads Postgres directly, serves /api/v2/analytics/* in a Nest-compatible envelope."
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "psycopg[binary,pool]>=3.2",
+    "pandas>=2.2",
+    "pyjwt>=2.9",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "orjson>=3.10",
+    "python-dateutil>=2.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "httpx>=0.27",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-v"
