@@ -24,6 +24,10 @@
 | [DATABASE_SCHEMA_v2.md](docs/DATABASE_SCHEMA_v2.md) | 完整数据模型（含训练三层、营养食材库、备赛周期、教练协同、PED 私域、离线幂等键） |
 | [API_DESIGN_v2.md](docs/API_DESIGN_v2.md) | 15 个模块的完整接口契约 + 权限矩阵 + 错误码 |
 | [PROJECT_TIMELINE_v2.md](docs/PROJECT_TIMELINE_v2.md) | 12 周交付计划 + 每周门槛 |
+| [AGENTS.md](AGENTS.md) | **AI 项目记忆**（定位、冻结决策、文档地图；与 Cursor 规则同步） |
+| [REVIEW_PROCESS.md](docs/REVIEW_PROCESS.md) | 自动评审 → 修复 → 入库流程 |
+
+> **与 AI 协作**：本仓库在 `.cursor/rules/` 下配置了 `alwaysApply` 规则，新开对话会自动加载 FitFlow Pro v2 上下文，无需每次重复介绍项目。
 
 ### 🗂 v1 历史文档（仅供参考，不再维护）
 
@@ -67,7 +71,7 @@
 体测域:   BodyRecords · ProgressPhotos
 备赛域:   Competitions · CheckIns
 消费域:   Expenses (12 类 + 预算 + ROI)
-教练域:   Coach (多对多 + 字段级权限)
+教练域:   Coach (多对多 + 模块级 scope_* 权限)
 私域:     Controlled (PED 模块，默认关闭，商店版 tree-shake)
 ```
 

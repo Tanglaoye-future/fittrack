@@ -96,7 +96,7 @@ export default function LoginPage() {
             <div className="mt-4 p-3 bg-primary-50 border border-primary-200 rounded-lg text-xs text-primary-700">
               <p className="font-medium mb-1">📝 测试账户：</p>
               <p>邮箱: test@fitflow.com</p>
-              <p>密码: test123456</p>
+              <p>密码: password123</p>
             </div>
           </div>
         </div>
