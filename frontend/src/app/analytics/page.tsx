@@ -1,66 +1,91 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
 import { RootLayout } from '@/components/common/RootLayout';
-import { apiClient } from '@/lib/api-client';
-import type { DailySummary, CaloriesTrendPoint, NutritionAnalysis, ExpenseAnalysis } from '@/types';
+import { analyticsClient } from '@/lib/api-client';
+import type { DailySummary, MacroTrendPoint, BodyWeightPoint } from '@/types';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  PieChart, Pie, Cell, BarChart, Bar,
+  PieChart, Pie, Cell,
 } from 'recharts';
 
-const PIE_COLORS = ['#0ea5e9', '#22c55e', '#eab308', '#ef4444', '#8b5cf6', '#f97316'];
+const PIE_COLORS = ['#0ea5e9', '#22c55e', '#eab308'];
+
+const num = (v: string | number | null | undefined): number => {
+  if (v === null || v === undefined) return 0;
+  const n = typeof v === 'string' ? parseFloat(v) : v;
+  return Number.isFinite(n) ? n : 0;
+};
+
+const fmtDate = (s: string): string => s.slice(0, 10);
 
 export default function AnalyticsPage() {
   const { isAuthenticated, hydrated } = useAuthStore();
   const router = useRouter();
-  const [todayStr] = useState(new Date().toISOString().split('T')[0]);
+
   const [startDate, setStartDate] = useState(() => {
     const d = new Date(); d.setDate(d.getDate() - 30);
     return d.toISOString().split('T')[0];
   });
-  const [endDate, setEndDate] = useState(todayStr);
-  const [dailySummary, setDailySummary] = useState<DailySummary | null>(null);
-  const [caloriesTrend, setCaloriesTrend] = useState<CaloriesTrendPoint[]>([]);
-  const [nutrition, setNutrition] = useState<NutritionAnalysis | null>(null);
-  const [expenseAnalysis, setExpenseAnalysis] = useState<ExpenseAnalysis | null>(null);
+  const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [summaries, setSummaries] = useState<DailySummary[]>([]);
+  const [macros, setMacros] = useState<MacroTrendPoint[]>([]);
+  const [bodyWeight, setBodyWeight] = useState<BodyWeightPoint[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (!hydrated) return;
     if (!isAuthenticated) { router.push('/login'); return; }
     loadAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated, isAuthenticated, startDate, endDate]);
 
   const loadAll = async () => {
     setLoading(true);
-    try {
-      const [summary, trend, nut, exp] = await Promise.all([
-        apiClient.get<any>('/analytics/daily-summary', { date: todayStr }),
-        apiClient.get<any>('/analytics/calories-trend', { start_date: startDate, end_date: endDate }),
-        apiClient.get<any>('/analytics/nutrition-analysis', { start_date: startDate, end_date: endDate }),
-        apiClient.get<any>('/analytics/expense-analysis', { start_date: startDate, end_date: endDate }),
-      ]);
-      setDailySummary(summary);
-      setCaloriesTrend(trend?.trend || []);
-      setNutrition(nut);
-      setExpenseAnalysis(exp);
-    } catch (e: any) { /* error handled */ }
+    setErrorMsg(null);
+    const params = { date_from: startDate, date_to: endDate };
+    const results = await Promise.allSettled([
+      analyticsClient.get<DailySummary[]>('/analytics/daily-summary', params),
+      analyticsClient.get<MacroTrendPoint[]>('/analytics/macros', params),
+      analyticsClient.get<BodyWeightPoint[]>('/analytics/body-weight', params),
+    ]);
+    setSummaries(results[0].status === 'fulfilled' ? results[0].value ?? [] : []);
+    setMacros(results[1].status === 'fulfilled' ? results[1].value ?? [] : []);
+    setBodyWeight(results[2].status === 'fulfilled' ? results[2].value ?? [] : []);
+    const failed = results.find((r) => r.status === 'rejected');
+    if (failed && failed.status === 'rejected') {
+      setErrorMsg(failed.reason instanceof Error ? failed.reason.message : '加载失败');
+    }
     setLoading(false);
   };
 
-  const nutritionPieData = nutrition ? [
-    { name: '蛋白质', value: nutrition.totals.protein * 4 },
-    { name: '碳水', value: nutrition.totals.carbs * 4 },
-    { name: '脂肪', value: nutrition.totals.fat * 9 },
-  ] : [];
+  const latest = summaries[summaries.length - 1];
+  const latestBw = bodyWeight[bodyWeight.length - 1];
 
-  const expenseBarData = expenseAnalysis ? Object.entries(expenseAnalysis.by_category).map(([k, v]) => ({
-    name: k, amount: Number(v.amount),
-  })) : [];
+  const macrosChart = macros.map((m) => ({
+    date: fmtDate(m.date),
+    kcal: Math.round(m.kcal),
+    protein: Math.round(m.protein),
+  }));
+
+  const bwChart = bodyWeight.map((b) => ({
+    date: fmtDate(b.measurement_date),
+    weight: num(b.morning_weight_kg) || null,
+    bf: num(b.body_fat_percentage) || null,
+  }));
+
+  const macroTotals = macros.reduce(
+    (acc, m) => ({ p: acc.p + m.protein, c: acc.c + m.carbs, f: acc.f + m.fat }),
+    { p: 0, c: 0, f: 0 },
+  );
+  const macroPieData = (macroTotals.p + macroTotals.c + macroTotals.f) > 0 ? [
+    { name: '蛋白质', value: Math.round(macroTotals.p * 4) },
+    { name: '碳水', value: Math.round(macroTotals.c * 4) },
+    { name: '脂肪', value: Math.round(macroTotals.f * 9) },
+  ] : [];
 
   if (!hydrated) return null;
   if (!isAuthenticated) return null;
@@ -77,116 +102,100 @@ export default function AnalyticsPage() {
           </div>
         </div>
 
+        {errorMsg && (
+          <div className="card bg-red-50 border border-red-200 text-red-700 text-sm">
+            分析服务调用失败：{errorMsg}（确认 Python 服务运行在 :3010）
+          </div>
+        )}
+
         {loading ? (
           <p className="text-gray-500 text-center py-12">加载中...</p>
         ) : (
           <>
-            {/* Today's Summary */}
-            {dailySummary && (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="card text-center">
-                  <div className="text-2xl font-bold text-primary-600">{dailySummary.total_calories}</div>
-                  <p className="text-sm text-gray-600 mt-1">今日摄入 (千卡)</p>
-                </div>
-                <div className="card text-center">
-                  <div className="text-2xl font-bold text-green-600">{dailySummary.total_calories_burned}</div>
-                  <p className="text-sm text-gray-600 mt-1">今日消耗 (千卡)</p>
-                </div>
-                <div className="card text-center">
-                  <div className="text-2xl font-bold text-warning-600">{dailySummary.total_protein}g</div>
-                  <p className="text-sm text-gray-600 mt-1">蛋白质</p>
-                </div>
-                <div className="card text-center">
-                  <div className="text-2xl font-bold text-danger-600">¥{dailySummary.total_expenses}</div>
-                  <p className="text-sm text-gray-600 mt-1">今日消费</p>
-                </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="card text-center">
+                <div className="text-2xl font-bold text-primary-600">{latest?.total_kcal ?? '--'}</div>
+                <p className="text-sm text-gray-600 mt-1">最近一日热量 (千卡)</p>
               </div>
-            )}
+              <div className="card text-center">
+                <div className="text-2xl font-bold text-warning-600">{latest ? Math.round(num(latest.total_protein)) : '--'}g</div>
+                <p className="text-sm text-gray-600 mt-1">最近一日蛋白质</p>
+              </div>
+              <div className="card text-center">
+                <div className="text-2xl font-bold text-green-600">{latest?.workout_minutes ?? '--'}</div>
+                <p className="text-sm text-gray-600 mt-1">最近一日训练 (分钟)</p>
+              </div>
+              <div className="card text-center">
+                <div className="text-2xl font-bold text-danger-600">
+                  {latest && num(latest.morning_weight_kg) ? num(latest.morning_weight_kg).toFixed(1) : latestBw && num(latestBw.morning_weight_kg) ? num(latestBw.morning_weight_kg).toFixed(1) : '--'}
+                </div>
+                <p className="text-sm text-gray-600 mt-1">最新晨重 (kg)</p>
+              </div>
+            </div>
 
-            {/* Calories Trend */}
             <div className="card">
-              <h3 className="font-bold text-lg mb-4">热量趋势</h3>
-              {caloriesTrend.length > 0 ? (
+              <h3 className="font-bold text-lg mb-4">体重 + 体脂趋势</h3>
+              {bwChart.length > 0 ? (
                 <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={caloriesTrend}>
+                  <LineChart data={bwChart}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-                    <YAxis tick={{ fontSize: 12 }} />
+                    <YAxis yAxisId="left" tick={{ fontSize: 12 }} label={{ value: 'kg', angle: -90, position: 'insideLeft' }} />
+                    <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12 }} label={{ value: '%', angle: 90, position: 'insideRight' }} />
                     <Tooltip />
                     <Legend />
-                    <Line type="monotone" dataKey="calories_in" stroke="#0ea5e9" name="摄入" strokeWidth={2} />
-                    <Line type="monotone" dataKey="calories_out" stroke="#ef4444" name="消耗" strokeWidth={2} />
+                    <Line yAxisId="left" type="monotone" dataKey="weight" stroke="#0ea5e9" name="晨重 (kg)" strokeWidth={2} connectNulls />
+                    <Line yAxisId="right" type="monotone" dataKey="bf" stroke="#ef4444" name="体脂 (%)" strokeWidth={2} connectNulls />
                   </LineChart>
                 </ResponsiveContainer>
               ) : (
-                <p className="text-gray-500 text-center py-8">暂无热量数据</p>
+                <p className="text-gray-500 text-center py-8">区间内暂无体测数据</p>
               )}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Nutrition Pie */}
-              <div className="card">
-                <h3 className="font-bold text-lg mb-4">营养分析（热量来源）</h3>
-                {nutrition && (nutrition.totals.protein > 0 || nutrition.totals.carbs > 0 || nutrition.totals.fat > 0) ? (
-                  <ResponsiveContainer width="100%" height={280}>
-                    <PieChart>
-                      <Pie data={nutritionPieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, value }) => `${name} ${Math.round(value)}千卡`}>
-                        {nutritionPieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-                      </Pie>
-                      <Tooltip formatter={(v: number) => `${Math.round(v)} 千卡`} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <p className="text-gray-500 text-center py-8">暂无营养数据</p>
-                )}
-              </div>
-
-              {/* Expense Bar */}
-              <div className="card">
-                <h3 className="font-bold text-lg mb-4">消费分析（按类别）</h3>
-                {expenseBarData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={280}>
-                    <BarChart data={expenseBarData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                      <YAxis tick={{ fontSize: 12 }} />
-                      <Tooltip formatter={(v: number) => `¥${v.toFixed(2)}`} />
-                      <Bar dataKey="amount" fill="#0ea5e9" name="金额" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <p className="text-gray-500 text-center py-8">暂无消费数据</p>
-                )}
-              </div>
+            <div className="card">
+              <h3 className="font-bold text-lg mb-4">每日 Macros 趋势</h3>
+              {macrosChart.length > 0 ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={macrosChart}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                    <YAxis yAxisId="left" tick={{ fontSize: 12 }} label={{ value: 'kcal', angle: -90, position: 'insideLeft' }} />
+                    <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12 }} label={{ value: 'g', angle: 90, position: 'insideRight' }} />
+                    <Tooltip />
+                    <Legend />
+                    <Line yAxisId="left" type="monotone" dataKey="kcal" stroke="#0ea5e9" name="热量 (kcal)" strokeWidth={2} />
+                    <Line yAxisId="right" type="monotone" dataKey="protein" stroke="#22c55e" name="蛋白质 (g)" strokeWidth={2} />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="text-gray-500 text-center py-8">区间内暂无饮食数据</p>
+              )}
             </div>
 
-            {/* Meal Type Breakdown */}
-            {nutrition?.by_meal_type && Object.keys(nutrition.by_meal_type).length > 0 && (
-              <div className="card">
-                <h3 className="font-bold text-lg mb-4">按餐食类型分布</h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {Object.entries(nutrition.by_meal_type).map(([type, data]) => (
-                    <div key={type} className="bg-gray-50 rounded-lg p-4 text-center">
-                      <div className="font-semibold">{type}</div>
-                      <div className="text-sm text-gray-500 mt-2">{data.calories} 千卡</div>
-                      <div className="text-xs text-gray-400">P: {data.protein}g C: {data.carbs}g F: {data.fat}g</div>
-                      <div className="text-xs text-gray-400">{data.count} 条记录</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Expense Summary */}
-            {expenseAnalysis && expenseAnalysis.total_amount > 0 && (
-              <div className="card text-center">
-                <p className="text-gray-600">
-                  在 {startDate} 至 {endDate} 期间，共消费
-                  <span className="text-xl font-bold text-warning-600 mx-2">¥{Number(expenseAnalysis.total_amount).toFixed(2)}</span>
-                  ({expenseAnalysis.transaction_count} 笔交易)
-                </p>
-              </div>
-            )}
+            <div className="card">
+              <h3 className="font-bold text-lg mb-4">窗口期热量来源分布</h3>
+              {macroPieData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={macroPieData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={110}
+                      label={({ name, value }) => `${name} ${value} 千卡`}
+                    >
+                      {macroPieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip formatter={(v: number) => `${v} 千卡`} />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="text-gray-500 text-center py-8">区间内暂无 Macros 数据</p>
+              )}
+            </div>
           </>
         )}
       </div>

@@ -17,8 +17,8 @@ class ApiClient {
   private client: AxiosInstance;
   private baseURL: string;
 
-  constructor() {
-    this.baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+  constructor(baseURL?: string) {
+    this.baseURL = baseURL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
 
     this.client = axios.create({
       baseURL: this.baseURL,
@@ -140,3 +140,7 @@ class ApiClient {
 }
 
 export const apiClient = new ApiClient();
+
+export const analyticsClient = new ApiClient(
+  process.env.NEXT_PUBLIC_ANALYTICS_API_URL || 'http://localhost:3010/api/v2',
+);

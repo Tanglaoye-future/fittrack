@@ -63,37 +63,41 @@ export interface BodyRecord {
   updated_at: string;
 }
 
+// v2 daily_summaries 行（Python analytics 服务 GET /daily-summary 直接 SELECT *）
 export interface DailySummary {
-  date: string;
-  total_calories: number;
-  total_protein: number;
-  total_carbs: number;
-  total_fat: number;
-  total_calories_burned: number;
-  total_expenses: number;
+  id: string;
+  user_id: string;
+  summary_date: string;
+  total_kcal: number | null;
+  total_protein: string | number | null;
+  total_carbs: string | number | null;
+  total_fat: string | number | null;
+  total_fiber: string | number | null;
   meals_count: number;
-  workouts_count: number;
+  workout_minutes: number;
+  total_volume_kg: string | number | null;
+  total_sets: number;
+  avg_rpe: string | number | null;
+  water_ml: number;
+  morning_weight_kg: string | number | null;
+  steps: number | null;
+  kcal_target: number | null;
+  kcal_target_pct: string | number | null;
+  is_complete: boolean;
 }
 
-export interface CaloriesTrendPoint {
+export interface MacroTrendPoint {
   date: string;
-  calories_in: number;
-  calories_out: number;
+  kcal: number;
+  protein: number;
+  carbs: number;
+  fat: number;
 }
 
-export interface NutritionAnalysis {
-  start_date: string;
-  end_date: string;
-  totals: { calories: number; protein: number; carbs: number; fat: number };
-  by_meal_type: Record<string, { calories: number; protein: number; carbs: number; fat: number; count: number }>;
-}
-
-export interface ExpenseAnalysis {
-  start_date: string;
-  end_date: string;
-  total_amount: number;
-  transaction_count: number;
-  by_category: Record<string, { amount: number; count: number }>;
+export interface BodyWeightPoint {
+  measurement_date: string;
+  morning_weight_kg: string | number | null;
+  body_fat_percentage: string | number | null;
 }
 
 export interface PaginatedResponse<T> {

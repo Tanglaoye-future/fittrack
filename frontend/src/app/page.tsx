@@ -84,12 +84,18 @@ export default function Home() {
           </div>
         </div>
 
-        {/* 提示信息 */}
-        <div className="md:col-span-3 bg-primary-50 border border-primary-200 rounded-lg p-4">
-          <p className="text-sm text-primary-900">
-            💡 <strong>提示：</strong> 数据分析功能正在开发中，敬请期待！
-          </p>
-        </div>
+        <a
+          href="/analytics"
+          className="md:col-span-3 card hover:shadow-md transition-shadow cursor-pointer bg-primary-50 border border-primary-200"
+        >
+          <div className="flex items-center gap-3">
+            <div className="text-3xl">📊</div>
+            <div>
+              <h3 className="font-bold text-lg mb-1">数据分析</h3>
+              <p className="text-sm text-gray-600">查看体重、Macros 趋势与窗口期热量来源</p>
+            </div>
+          </div>
+        </a>
       </div>
     </RootLayout>
   );
