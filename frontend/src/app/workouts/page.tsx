@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
 import { RootLayout } from '@/components/common/RootLayout';
 import { apiClient } from '@/lib/api-client';
+import { nowDate, nowTime } from '@/lib/datetime';
+import { DateTimeAdjuster } from '@/components/common/DateTimeAdjuster';
 import type { Workout, PaginatedResponse } from '@/types';
 
 const WORKOUT_TYPES: Record<string, string> = {
@@ -30,6 +32,7 @@ export default function WorkoutsPage() {
   const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingWorkout, setEditingWorkout] = useState<Workout | null>(null);
+  const [adjustTime, setAdjustTime] = useState(false);
   const [form, setForm] = useState({
     workout_type: 'STRENGTH',
     exercise_name: '',
@@ -40,8 +43,8 @@ export default function WorkoutsPage() {
     reps: '',
     weight: '',
     notes: '',
-    workout_date: new Date().toISOString().split('T')[0],
-    workout_time: '',
+    workout_date: nowDate(),
+    workout_time: nowTime(),
   });
 
   useEffect(() => {
@@ -66,12 +69,14 @@ export default function WorkoutsPage() {
 
   const openCreate = () => {
     setEditingWorkout(null);
-    setForm({ workout_type: 'STRENGTH', exercise_name: '', duration_minutes: '', calories_burned: '', intensity: '', sets: '', reps: '', weight: '', notes: '', workout_date: new Date().toISOString().split('T')[0], workout_time: '' });
+    setAdjustTime(false);
+    setForm({ workout_type: 'STRENGTH', exercise_name: '', duration_minutes: '', calories_burned: '', intensity: '', sets: '', reps: '', weight: '', notes: '', workout_date: nowDate(), workout_time: nowTime() });
     setShowModal(true);
   };
 
   const openEdit = (w: Workout) => {
     setEditingWorkout(w);
+    setAdjustTime(true);
     setForm({
       workout_type: w.workout_type,
       exercise_name: w.exercise_name,
@@ -82,8 +87,8 @@ export default function WorkoutsPage() {
       reps: w.reps?.toString() || '',
       weight: w.weight?.toString() || '',
       notes: w.notes || '',
-      workout_date: w.workout_date?.split('T')[0] || '',
-      workout_time: w.workout_time || '',
+      workout_date: w.workout_date?.split('T')[0] || nowDate(),
+      workout_time: w.workout_time || nowTime(),
     });
     setShowModal(true);
   };
@@ -93,6 +98,8 @@ export default function WorkoutsPage() {
     setError('');
     const payload: any = {
       ...form,
+      workout_date: adjustTime ? form.workout_date : nowDate(),
+      workout_time: adjustTime ? form.workout_time : nowTime(),
       duration_minutes: form.duration_minutes ? Number(form.duration_minutes) : undefined,
       calories_burned: form.calories_burned ? Number(form.calories_burned) : undefined,
       sets: form.sets ? Number(form.sets) : undefined,
@@ -236,16 +243,14 @@ export default function WorkoutsPage() {
                     <input type="number" value={form.reps} onChange={(e) => setForm({ ...form, reps: e.target.value })} className="input" />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="label">日期</label>
-                    <input type="date" value={form.workout_date} onChange={(e) => setForm({ ...form, workout_date: e.target.value })} className="input" />
-                  </div>
-                  <div>
-                    <label className="label">时间</label>
-                    <input type="time" value={form.workout_time} onChange={(e) => setForm({ ...form, workout_time: e.target.value })} className="input" />
-                  </div>
-                </div>
+                <DateTimeAdjuster
+                  open={adjustTime}
+                  onOpenChange={setAdjustTime}
+                  date={form.workout_date}
+                  onDateChange={(v) => setForm({ ...form, workout_date: v })}
+                  time={form.workout_time}
+                  onTimeChange={(v) => setForm({ ...form, workout_time: v })}
+                />
                 <div>
                   <label className="label">备注</label>
                   <input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="input" placeholder="训练感想..." />

@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
 import { RootLayout } from '@/components/common/RootLayout';
 import { apiClient } from '@/lib/api-client';
+import { nowDate, nowTime } from '@/lib/datetime';
+import { DateTimeAdjuster } from '@/components/common/DateTimeAdjuster';
 import type { Meal, PaginatedResponse } from '@/types';
 
 const MEAL_TYPES: Record<string, string> = {
@@ -27,6 +29,7 @@ export default function MealsPage() {
   const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingMeal, setEditingMeal] = useState<Meal | null>(null);
+  const [adjustTime, setAdjustTime] = useState(false);
   const [form, setForm] = useState({
     meal_type: 'BREAKFAST',
     food_name: '',
@@ -35,8 +38,8 @@ export default function MealsPage() {
     carbs: '',
     fat: '',
     portion_size: '',
-    meal_date: new Date().toISOString().split('T')[0],
-    meal_time: '',
+    meal_date: nowDate(),
+    meal_time: nowTime(),
   });
 
   useEffect(() => {
@@ -61,12 +64,14 @@ export default function MealsPage() {
 
   const openCreate = () => {
     setEditingMeal(null);
-    setForm({ meal_type: 'BREAKFAST', food_name: '', calories: '', protein: '', carbs: '', fat: '', portion_size: '', meal_date: new Date().toISOString().split('T')[0], meal_time: '' });
+    setAdjustTime(false);
+    setForm({ meal_type: 'BREAKFAST', food_name: '', calories: '', protein: '', carbs: '', fat: '', portion_size: '', meal_date: nowDate(), meal_time: nowTime() });
     setShowModal(true);
   };
 
   const openEdit = (meal: Meal) => {
     setEditingMeal(meal);
+    setAdjustTime(true);
     setForm({
       meal_type: meal.meal_type,
       food_name: meal.food_name,
@@ -75,8 +80,8 @@ export default function MealsPage() {
       carbs: meal.carbs?.toString() || '',
       fat: meal.fat?.toString() || '',
       portion_size: meal.portion_size || '',
-      meal_date: meal.meal_date?.split('T')[0] || '',
-      meal_time: meal.meal_time || '',
+      meal_date: meal.meal_date?.split('T')[0] || nowDate(),
+      meal_time: meal.meal_time || nowTime(),
     });
     setShowModal(true);
   };
@@ -86,6 +91,8 @@ export default function MealsPage() {
     setError('');
     const payload = {
       ...form,
+      meal_date: adjustTime ? form.meal_date : nowDate(),
+      meal_time: adjustTime ? form.meal_time : nowTime(),
       calories: form.calories ? Number(form.calories) : undefined,
       protein: form.protein ? Number(form.protein) : undefined,
       carbs: form.carbs ? Number(form.carbs) : undefined,
@@ -217,20 +224,18 @@ export default function MealsPage() {
                     <input type="number" value={form.fat} onChange={(e) => setForm({ ...form, fat: e.target.value })} className="input" />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="label">份量</label>
-                    <input value={form.portion_size} onChange={(e) => setForm({ ...form, portion_size: e.target.value })} className="input" placeholder="如：200g" />
-                  </div>
-                  <div>
-                    <label className="label">日期</label>
-                    <input type="date" value={form.meal_date} onChange={(e) => setForm({ ...form, meal_date: e.target.value })} className="input" />
-                  </div>
-                </div>
                 <div>
-                  <label className="label">时间</label>
-                  <input type="time" value={form.meal_time} onChange={(e) => setForm({ ...form, meal_time: e.target.value })} className="input" />
+                  <label className="label">份量</label>
+                  <input value={form.portion_size} onChange={(e) => setForm({ ...form, portion_size: e.target.value })} className="input" placeholder="如：200g" />
                 </div>
+                <DateTimeAdjuster
+                  open={adjustTime}
+                  onOpenChange={setAdjustTime}
+                  date={form.meal_date}
+                  onDateChange={(v) => setForm({ ...form, meal_date: v })}
+                  time={form.meal_time}
+                  onTimeChange={(v) => setForm({ ...form, meal_time: v })}
+                />
                 <div className="flex gap-3 pt-2">
                   <button type="submit" className="btn btn-primary flex-1">{editingMeal ? '保存' : '添加'}</button>
                   <button type="button" onClick={() => setShowModal(false)} className="btn btn-secondary flex-1">取消</button>

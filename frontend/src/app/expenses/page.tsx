@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
 import { RootLayout } from '@/components/common/RootLayout';
 import { apiClient } from '@/lib/api-client';
+import { nowDate } from '@/lib/datetime';
+import { DateTimeAdjuster } from '@/components/common/DateTimeAdjuster';
 import type { Expense, PaginatedResponse } from '@/types';
 
 const CATEGORY_MAP: Record<string, string> = {
@@ -25,13 +27,20 @@ export default function ExpensesPage() {
   const [error, setError] = useState('');
   const [stats, setStats] = useState<any>(null);
   const [showModal, setShowModal] = useState(false);
+  const [adjustTime, setAdjustTime] = useState(false);
   const [form, setForm] = useState({
     category: 'FOOD',
     amount: '',
     currency: 'CNY',
     description: '',
-    expense_date: new Date().toISOString().split('T')[0],
+    expense_date: nowDate(),
   });
+
+  const openCreate = () => {
+    setAdjustTime(false);
+    setForm({ category: 'FOOD', amount: '', currency: 'CNY', description: '', expense_date: nowDate() });
+    setShowModal(true);
+  };
 
   useEffect(() => {
     if (!hydrated) return;
@@ -69,7 +78,7 @@ export default function ExpensesPage() {
     e.preventDefault();
     setError('');
     try {
-      await apiClient.post('/expenses', { ...form, amount: Number(form.amount) });
+      await apiClient.post('/expenses', { ...form, amount: Number(form.amount), expense_date: adjustTime ? form.expense_date : nowDate() });
       setShowModal(false);
       loadExpenses();
       loadStats();
@@ -86,7 +95,7 @@ export default function ExpensesPage() {
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold">消费管理</h1>
-          <button onClick={() => setShowModal(true)} className="btn btn-primary">+ 添加消费</button>
+          <button onClick={openCreate} className="btn btn-primary">+ 添加消费</button>
         </div>
 
         {error && (
@@ -189,10 +198,12 @@ export default function ExpensesPage() {
                   <label className="label">描述</label>
                   <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="input" placeholder="月会费..." />
                 </div>
-                <div>
-                  <label className="label">日期</label>
-                  <input type="date" value={form.expense_date} onChange={(e) => setForm({ ...form, expense_date: e.target.value })} className="input" />
-                </div>
+                <DateTimeAdjuster
+                  open={adjustTime}
+                  onOpenChange={setAdjustTime}
+                  date={form.expense_date}
+                  onDateChange={(v) => setForm({ ...form, expense_date: v })}
+                />
                 <div className="flex gap-3 pt-2">
                   <button type="submit" className="btn btn-primary flex-1">添加</button>
                   <button type="button" onClick={() => setShowModal(false)} className="btn btn-secondary flex-1">取消</button>

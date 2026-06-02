@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
 import { RootLayout } from '@/components/common/RootLayout';
 import { apiClient } from '@/lib/api-client';
+import { nowDate } from '@/lib/datetime';
+import { DateTimeAdjuster } from '@/components/common/DateTimeAdjuster';
 import type { BodyRecord, PaginatedResponse } from '@/types';
 
 export default function BodyRecordsPage() {
@@ -19,6 +21,7 @@ export default function BodyRecordsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [adjustTime, setAdjustTime] = useState(false);
   const [form, setForm] = useState({
     weight: '',
     body_fat_percentage: '',
@@ -28,8 +31,14 @@ export default function BodyRecordsPage() {
     hip: '',
     arm: '',
     thigh: '',
-    measurement_date: new Date().toISOString().split('T')[0],
+    measurement_date: nowDate(),
   });
+
+  const openCreate = () => {
+    setAdjustTime(false);
+    setForm({ weight: '', body_fat_percentage: '', muscle_mass: '', chest: '', waist: '', hip: '', arm: '', thigh: '', measurement_date: nowDate() });
+    setShowModal(true);
+  };
 
   useEffect(() => {
     if (!hydrated) return;
@@ -54,7 +63,7 @@ export default function BodyRecordsPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    const payload: any = { measurement_date: form.measurement_date };
+    const payload: any = { measurement_date: adjustTime ? form.measurement_date : nowDate() };
     if (form.weight) payload.weight = Number(form.weight);
     if (form.body_fat_percentage) payload.body_fat_percentage = Number(form.body_fat_percentage);
     if (form.muscle_mass) payload.muscle_mass = Number(form.muscle_mass);
@@ -80,7 +89,7 @@ export default function BodyRecordsPage() {
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold">身体数据</h1>
-          <button onClick={() => setShowModal(true)} className="btn btn-primary">+ 添加测量</button>
+          <button onClick={openCreate} className="btn btn-primary">+ 添加测量</button>
         </div>
 
         {error && (
@@ -172,10 +181,12 @@ export default function BodyRecordsPage() {
                     <input type="number" step="0.1" value={form.thigh} onChange={(e) => setForm({ ...form, thigh: e.target.value })} className="input" />
                   </div>
                 </div>
-                <div>
-                  <label className="label">测量日期</label>
-                  <input type="date" value={form.measurement_date} onChange={(e) => setForm({ ...form, measurement_date: e.target.value })} className="input" />
-                </div>
+                <DateTimeAdjuster
+                  open={adjustTime}
+                  onOpenChange={setAdjustTime}
+                  date={form.measurement_date}
+                  onDateChange={(v) => setForm({ ...form, measurement_date: v })}
+                />
                 <div className="flex gap-3 pt-2">
                   <button type="submit" className="btn btn-primary flex-1">添加</button>
                   <button type="button" onClick={() => setShowModal(false)} className="btn btn-secondary flex-1">取消</button>
