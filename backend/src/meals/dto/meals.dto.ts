@@ -7,6 +7,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -291,6 +292,17 @@ export class UpdateMealPlanTemplateDto {
   @IsOptional()
   @IsInt()
   total_fat_g?: number;
+}
+
+export class CloneFromOfficialMealPlanDto {
+  @ApiProperty({ description: '客户端幂等键（UUID），同 key 重放返回已创建模板' })
+  @IsUUID()
+  client_op_id: string;
+
+  @ApiPropertyOptional({ description: '自定义模板名（不填则用官方名）' })
+  @IsOptional()
+  @IsString()
+  name?: string;
 }
 
 // ── Water / Electrolytes ───────────────────────────────────────────────────

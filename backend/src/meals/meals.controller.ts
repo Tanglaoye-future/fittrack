@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  ParseUUIDPipe,
   Query,
   UseGuards,
   HttpCode,
@@ -17,6 +18,7 @@ import { CurrentUser, RequestUser } from '@/common/decorators/current-user.decor
 import { MealsService } from './meals.service';
 import {
   AddMealItemDto,
+  CloneFromOfficialMealPlanDto,
   CreateMealLogDto,
   CreateMealPlanTemplateDto,
   ListMealsDto,
@@ -59,6 +61,31 @@ export class MealsController {
     return this.mealsService.listPlanTemplates(user.userId);
   }
 
+  @Get('official-plans')
+  @ApiOperation({ summary: '官方餐单预设库（增肌期 / 减脂期）' })
+  listOfficialMealPlans() {
+    return this.mealsService.listOfficialMealPlans();
+  }
+
+  @Post('plan-templates/from-official/:slug')
+  @ApiOperation({ summary: '基于官方餐单预设克隆为我的模板（带 client_op_id 幂等）' })
+  @ApiParam({
+    name: 'slug',
+    description: '官方餐单 slug，如 dumbbell-meals-bulk / dumbbell-meals-cut',
+  })
+  cloneFromOfficialMealPlan(
+    @Param('slug') slug: string,
+    @Body() dto: CloneFromOfficialMealPlanDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.mealsService.cloneFromOfficialMealPlan(
+      slug,
+      user.userId,
+      dto.client_op_id,
+      dto.name,
+    );
+  }
+
   @Post('plan-templates')
   @ApiOperation({ summary: '新建餐单模板（嵌套 scheduled_meals）' })
   createPlanTemplate(@Body() dto: CreateMealPlanTemplateDto, @CurrentUser() user: RequestUser) {
@@ -98,7 +125,10 @@ export class MealsController {
   @Get(':id')
   @ApiOperation({ summary: '餐次详情' })
   @ApiParam({ name: 'id' })
-  findOne(@Param('id') id: string, @CurrentUser() user: RequestUser) {
+  findOne(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @CurrentUser() user: RequestUser,
+  ) {
     return this.mealsService.findOne(id, user.userId);
   }
 

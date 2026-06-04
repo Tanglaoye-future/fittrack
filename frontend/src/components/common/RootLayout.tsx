@@ -30,6 +30,9 @@ export function RootLayout({ children, showNav = true }: LayoutProps) {
               </Link>
 
               <div className="hidden md:flex space-x-8">
+                <Link href="/plans" className="text-gray-700 hover:text-primary-600">
+                  计划
+                </Link>
                 <Link href="/meals" className="text-gray-700 hover:text-primary-600">
                   饮食
                 </Link>

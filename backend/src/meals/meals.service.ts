@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { PrismaService } from '@/database/prisma.service';
 import { MacroCalculatorService, MacroResult } from '@/common/services/macro-calculator.service';
 import {
@@ -15,6 +16,10 @@ import {
   UpdateMealLogDto,
   UpdateMealPlanTemplateDto,
 } from './dto/meals.dto';
+import {
+  OFFICIAL_MEAL_PLANS,
+  findOfficialMealPlanBySlug,
+} from './official-meal-plans';
 
 @Injectable()
 export class MealsService {
@@ -386,6 +391,119 @@ export class MealsService {
     });
     await this.prisma.mealPlanTemplate.update({ where: { id }, data: { is_active: true } });
     return { activated: true };
+  }
+
+  // ── Official meal plans (预设库) ───────────────────────────────────────────
+
+  /**
+   * 官方计划餐预设元数据，前端用于卡片列表 / 详情预览。
+   */
+  listOfficialMealPlans() {
+    return OFFICIAL_MEAL_PLANS.map((p) => ({
+      slug: p.slug,
+      name: p.name,
+      phase_tag: p.phase_tag,
+      description: p.description,
+      total_kcal: p.total_kcal,
+      total_protein_g: p.total_protein_g,
+      total_carbs_g: p.total_carbs_g,
+      total_fat_g: p.total_fat_g,
+      meal_count: p.meals.length,
+      meals: p.meals,
+    }));
+  }
+
+  /**
+   * 从官方预设克隆出归属当前用户的 MealPlanTemplate。
+   * - 强制幂等：客户端提供 client_op_id（SCHEMA §0.1）
+   * - total_* 由 ScheduledMeal.target_* 求和算出，避免源数据偏差直接落库
+   * - 解析 Food.name_zh + is_official=true → food_id；缺失抛 400 中文提示
+   */
+  async cloneFromOfficialMealPlan(
+    slug: string,
+    userId: string,
+    clientOpId: string,
+    customName?: string,
+  ) {
+    const official = findOfficialMealPlanBySlug(slug);
+    if (!official) throw new NotFoundException(`官方餐单 ${slug} 不存在`);
+
+    // 幂等：同 client_op_id 直接返回已建模板
+    const existing = await this.prisma.mealPlanTemplate.findUnique({
+      where: { client_op_id: clientOpId },
+      include: {
+        scheduled_meals: {
+          include: { ingredients: { include: { food: true } } },
+          orderBy: { order_index: 'asc' },
+        },
+      },
+    });
+    if (existing && existing.user_id === userId) return existing;
+
+    const namesZh = Array.from(
+      new Set(
+        official.meals.flatMap((m) => m.ingredients.map((i) => i.food_name_zh)),
+      ),
+    );
+    const foods = await this.prisma.food.findMany({
+      where: { name_zh: { in: namesZh }, is_official: true },
+    });
+    const byName = new Map(foods.map((f) => [f.name_zh, f.id]));
+    const missing = namesZh.filter((n) => !byName.has(n));
+    if (missing.length) {
+      throw new BadRequestException(
+        `官方食材库未就绪（缺 ${missing.length} 项），请联系管理员重跑食材种子`,
+      );
+    }
+
+    // 按每餐 target_* 求和，源数据若有漂移以餐为准
+    const totals = official.meals.reduce(
+      (acc, m) => ({
+        kcal: acc.kcal + m.target_kcal,
+        protein: acc.protein + m.target_protein_g,
+        carbs: acc.carbs + m.target_carbs_g,
+        fat: acc.fat + m.target_fat_g,
+      }),
+      { kcal: 0, protein: 0, carbs: 0, fat: 0 },
+    );
+
+    const now = new Date();
+    return this.prisma.mealPlanTemplate.create({
+      data: {
+        user_id: userId,
+        name: customName ?? official.name,
+        total_kcal: totals.kcal,
+        total_protein_g: totals.protein,
+        total_carbs_g: totals.carbs,
+        total_fat_g: totals.fat,
+        client_op_id: clientOpId,
+        client_ts: now,
+        scheduled_meals: {
+          create: official.meals.map((m) => ({
+            order_index: m.order_index,
+            meal_slot: m.meal_slot as never,
+            target_time: m.target_time,
+            target_kcal: m.target_kcal,
+            target_protein_g: m.target_protein_g,
+            target_carbs_g: m.target_carbs_g,
+            target_fat_g: m.target_fat_g,
+            notes: m.notes,
+            ingredients: {
+              create: m.ingredients.map((i) => ({
+                food_id: byName.get(i.food_name_zh)!,
+                grams: i.grams,
+              })),
+            },
+          })),
+        },
+      },
+      include: {
+        scheduled_meals: {
+          include: { ingredients: { include: { food: true } } },
+          orderBy: { order_index: 'asc' },
+        },
+      },
+    });
   }
 
   // ── Private helpers ────────────────────────────────────────────────────────

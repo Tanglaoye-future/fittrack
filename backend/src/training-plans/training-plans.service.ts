@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '@/database/prisma.service';
@@ -13,6 +14,10 @@ import {
   CreateTemplateExerciseDto,
   CloneTrainingPlanDto,
 } from './dto/training-plans.dto';
+import {
+  OFFICIAL_TRAINING_PLANS,
+  findOfficialPlanBySlug,
+} from './official-plans';
 
 @Injectable()
 export class TrainingPlansService {
@@ -306,8 +311,156 @@ export class TrainingPlansService {
 
   // ── Official templates (预设库) ────────────────────────────────────────────
 
-  findOfficialTemplates() {
-    return [];
+  /**
+   * 返回官方训练计划元数据（已 join Exercise 表回填 name_zh / id），
+   * 前端无需再发请求解析动作。
+   */
+  async findOfficialTemplates() {
+    const allNamesEn = Array.from(
+      new Set(
+        OFFICIAL_TRAINING_PLANS.flatMap((p) =>
+          p.templates.flatMap((t) => t.exercises.map((e) => e.exercise_name_en)),
+        ),
+      ),
+    );
+    const exs = await this.prisma.exercise.findMany({
+      where: { name_en: { in: allNamesEn } },
+      select: { id: true, name_en: true, name_zh: true, primary_muscle: true },
+    });
+    const byEn = new Map(exs.map((e) => [e.name_en, e]));
+
+    return OFFICIAL_TRAINING_PLANS.map((p) => ({
+      slug: p.slug,
+      name: p.name,
+      description: p.description,
+      weeks: p.weeks,
+      phase_tag: p.phase_tag,
+      day_count: p.templates.length,
+      total_exercises: p.templates.reduce((sum, t) => sum + t.exercises.length, 0),
+      templates: p.templates.map((t) => ({
+        name: t.name,
+        day_of_week: t.day_of_week,
+        estimated_minutes: t.estimated_minutes,
+        rest_seconds_default: t.rest_seconds_default,
+        notes: t.notes,
+        exercises: t.exercises.map((e) => {
+          const resolved = byEn.get(e.exercise_name_en);
+          return {
+            exercise_id: resolved?.id ?? null,
+            exercise_name_zh: resolved?.name_zh ?? e.exercise_name_en,
+            exercise_name_en: e.exercise_name_en,
+            primary_muscle: resolved?.primary_muscle ?? null,
+            target_sets: e.target_sets,
+            target_reps_min: e.target_reps_min,
+            target_reps_max: e.target_reps_max,
+            target_rir: e.target_rir,
+            target_rpe: e.target_rpe,
+            rest_seconds: e.rest_seconds,
+            tempo: e.tempo,
+            notes: e.notes,
+          };
+        }),
+      })),
+    }));
+  }
+
+  /**
+   * 从官方预设克隆出归属当前用户的训练计划。
+   * - 强制幂等：用户提供 `client_op_id`；同 key 重放返回已创建计划（SCHEMA §0.1）
+   * - 解析 Exercise.name_en → exercise_id，并把中文名等元数据带回
+   * - 缺动作时返回中文提示（避免暴露内部 slug 给运动员）
+   * - 不自动激活；用户走标准 activate 流程
+   */
+  async cloneFromOfficial(
+    slug: string,
+    userId: string,
+    clientOpId: string,
+    customName?: string,
+  ) {
+    const official = findOfficialPlanBySlug(slug);
+    if (!official) throw new NotFoundException(`官方计划 ${slug} 不存在`);
+
+    // 幂等校验：用户 client_op_id 落在首条 TemplateExercise 上，重放即命中
+    const existing = await this.prisma.templateExercise.findUnique({
+      where: { client_op_id: clientOpId },
+      include: {
+        template: {
+          include: {
+            plan: {
+              include: {
+                templates: {
+                  include: { exercises: { include: { exercise: true } } },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (existing?.template?.plan?.user_id === userId) {
+      return existing.template.plan;
+    }
+
+    const namesEn = Array.from(
+      new Set(
+        official.templates.flatMap((t) => t.exercises.map((e) => e.exercise_name_en)),
+      ),
+    );
+    const exercises = await this.prisma.exercise.findMany({
+      where: { name_en: { in: namesEn } },
+    });
+    const byName = new Map(exercises.map((ex) => [ex.name_en, ex.id]));
+    const missing = namesEn.filter((n) => !byName.has(n));
+    if (missing.length) {
+      throw new BadRequestException(
+        `官方动作库未就绪（缺 ${missing.length} 项），请联系管理员重跑动作种子`,
+      );
+    }
+
+    const now = new Date();
+    let isFirstWrite = true; // 第一条 TemplateExercise 拿用户的 client_op_id
+    return this.prisma.trainingPlan.create({
+      data: {
+        user_id: userId,
+        name: customName ?? official.name,
+        description: official.description,
+        weeks: official.weeks,
+        templates: {
+          create: official.templates.map((t) => ({
+            name: t.name,
+            day_of_week: t.day_of_week,
+            estimated_minutes: t.estimated_minutes,
+            rest_seconds_default: t.rest_seconds_default,
+            notes: t.notes,
+            exercises: {
+              create: t.exercises.map((e, idx) => {
+                const opId = isFirstWrite ? clientOpId : randomUUID();
+                isFirstWrite = false;
+                return {
+                  exercise_id: byName.get(e.exercise_name_en)!,
+                  order_index: idx,
+                  target_sets: e.target_sets,
+                  target_reps_min: e.target_reps_min,
+                  target_reps_max: e.target_reps_max,
+                  target_rir: e.target_rir,
+                  target_rpe: e.target_rpe,
+                  rest_seconds: e.rest_seconds,
+                  tempo: e.tempo,
+                  notes: e.notes,
+                  client_op_id: opId,
+                  client_ts: now,
+                };
+              }),
+            },
+          })),
+        },
+      },
+      include: {
+        templates: {
+          include: { exercises: { include: { exercise: true } } },
+        },
+      },
+    });
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────────

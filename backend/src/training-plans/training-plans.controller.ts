@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  ParseUUIDPipe,
   UseGuards,
   HttpCode,
   HttpStatus,
@@ -26,6 +27,7 @@ import {
   UpdateTrainingTemplateDto,
   CreateTemplateExerciseDto,
   CloneTrainingPlanDto,
+  CloneFromOfficialPlanDto,
 } from './dto/training-plans.dto';
 
 @ApiTags('TrainingPlans')
@@ -50,15 +52,37 @@ export class TrainingPlansController {
   }
 
   @Get('official-templates')
-  @ApiOperation({ summary: '官方预设计划库' })
+  @ApiOperation({ summary: '官方预设计划库（哑铃 4 分化 · 增肌/减脂期）' })
   findOfficialTemplates() {
     return this.trainingPlansService.findOfficialTemplates();
+  }
+
+  @Post('from-official/:slug')
+  @ApiOperation({ summary: '基于官方预设克隆为我的训练计划（带 client_op_id 幂等）' })
+  @ApiParam({
+    name: 'slug',
+    description: '官方计划 slug，如 dumbbell-4split-offseason / dumbbell-4split-prep',
+  })
+  cloneFromOfficial(
+    @Param('slug') slug: string,
+    @Body() dto: CloneFromOfficialPlanDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.trainingPlansService.cloneFromOfficial(
+      slug,
+      user.userId,
+      dto.client_op_id,
+      dto.name,
+    );
   }
 
   @Get(':id')
   @ApiOperation({ summary: '计划详情（含模板 + 动作）' })
   @ApiParam({ name: 'id', description: '计划 UUID' })
-  findOne(@Param('id') id: string, @CurrentUser() user: RequestUser) {
+  findOne(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @CurrentUser() user: RequestUser,
+  ) {
     return this.trainingPlansService.findOne(id, user.userId);
   }
 

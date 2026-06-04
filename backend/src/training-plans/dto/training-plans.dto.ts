@@ -186,3 +186,14 @@ export class CloneTrainingPlanDto {
   @IsString()
   name?: string;
 }
+
+export class CloneFromOfficialPlanDto {
+  @ApiProperty({ description: '客户端幂等键（UUID），同 key 重放返回已创建计划' })
+  @IsUUID()
+  client_op_id: string;
+
+  @ApiPropertyOptional({ description: '自定义计划名（不填则用官方名）' })
+  @IsOptional()
+  @IsString()
+  name?: string;
+}
